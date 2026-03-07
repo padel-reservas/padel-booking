@@ -99,20 +99,39 @@ export default function Page() {
   }, [slotsWithPlayers]);
 
   async function addPlayer(slotId: number) {
-    const rawName = (nameInput[slotId] ?? defaultName).trim();
-    if (!rawName) {
-      alert('Poné tu nombre');
-      return;
-    }
+  const rawName = (nameInput[slotId] ?? defaultName).trim();
+  if (!rawName) {
+    alert('Poné tu nombre');
+    return;
+  }
 
-    const slot = slotsWithPlayers.find((s) => s.id === slotId);
-    if (!slot) return;
+  const slot = slotsWithPlayers.find((s) => s.id === slotId);
+  if (!slot) return;
 
-    if (slot.players.length >= MAX_PLAYERS) {
-      alert('Ese turno ya está completo');
-      return;
-    }
+  if (slot.players.length >= MAX_PLAYERS) {
+    alert('Ese turno ya está completo');
+    return;
+  }
 
+  const alreadyThere = slot.players.some(
+    (p) => p.name.trim().toLowerCase() === rawName.toLowerCase()
+  );
+  if (alreadyThere) {
+    alert('Ese nombre ya está anotado en este turno');
+    return;
+  }
+
+  await supabase.from('players').insert({
+    slot_id: slotId,
+    name: rawName,
+    paid: false,
+  });
+
+  localStorage.setItem(PLAYER_NAME_KEY, rawName);
+  setDefaultName(rawName);
+  setNameInput((v) => ({ ...v, [slotId]: '' }));
+  loadData();
+}
     const alreadyThere = slot.players.some(
       (p) => p.name.trim().toLowerCase() === rawName.toLowerCase()
     );
