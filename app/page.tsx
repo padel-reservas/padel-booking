@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 const MAX_PLAYERS = 4;
-const PLAYER_NAME_KEY = 'padel-player-name';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,7 +44,6 @@ export default function Page() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [nameInput, setNameInput] = useState<Record<number, string>>({});
-  const [defaultName, setDefaultName] = useState('');
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [pin, setPin] = useState('');
@@ -68,9 +66,7 @@ export default function Page() {
       .order('date')
       .order('time');
 
-    const { data: playersData } = await supabase
-      .from('players')
-      .select('*');
+    const { data: playersData } = await supabase.from('players').select('*');
 
     setSlots(slotsData || []);
     setPlayers(playersData || []);
@@ -79,8 +75,6 @@ export default function Page() {
 
   useEffect(() => {
     loadData();
-    const savedName = localStorage.getItem(PLAYER_NAME_KEY) || '';
-    setDefaultName(savedName);
   }, []);
 
   const slotsWithPlayers = useMemo(() => {
@@ -102,7 +96,7 @@ export default function Page() {
   }, [slotsWithPlayers]);
 
   async function addPlayer(slotId: number) {
-    const rawName = (nameInput[slotId] ?? defaultName).trim();
+    const rawName = (nameInput[slotId] || '').trim();
 
     if (!rawName) {
       alert('Poné tu nombre');
@@ -137,8 +131,6 @@ export default function Page() {
       return;
     }
 
-    localStorage.setItem(PLAYER_NAME_KEY, rawName);
-    setDefaultName(rawName);
     setNameInput((v) => ({ ...v, [slotId]: '' }));
     loadData();
   }
@@ -253,6 +245,7 @@ export default function Page() {
                   placeholder="PIN"
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
+                  autoComplete="new-password"
                   style={{
                     padding: '10px 12px',
                     borderRadius: 12,
@@ -420,12 +413,14 @@ export default function Page() {
                       }}
                     >
                       <input
-                        placeholder={defaultName || 'Tu nombre'}
-                        value={nameInput[slot.id] ?? ''}
+                        placeholder="Tu nombre"
+                        value={nameInput[slot.id] || ''}
                         onChange={(e) =>
                           setNameInput((v) => ({ ...v, [slot.id]: e.target.value }))
                         }
-                        autoComplete="off"
+                        autoComplete="new-password"
+                        name={`slot-player-${slot.id}`}
+                        data-form-type="other"
                         style={{
                           flex: 1,
                           minWidth: 180,
