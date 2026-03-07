@@ -1,31 +1,32 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
-const DEFAULT_TIMES = ['08:00', '09:00', '10:00', '11:00', '12:00'];
 const MAX_PLAYERS = 4;
-const STORAGE_KEY = 'padel-booking-mvp-v1';
 
-type Player = {
-  id: string;
-  name: string;
-  paid: boolean;
-};
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-type Slot = {
-  id: string;
+type SlotRow = {
+  id: number;
   date: string;
   time: string;
-  players: Player[];
+  created_at?: string;
 };
 
-function todayISO() {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
+type PlayerRow = {
+  id: number;
+  slot_id: number;
+  name: string;
+  paid: boolean;
+  created_at?: string;
+};
+
+type SlotWithPlayers = SlotRow & {
+  players: PlayerRow[];
+};
 
 function formatDate(iso: string) {
   if (!iso) return '';
@@ -33,28 +34,10 @@ function formatDate(iso: string) {
   return `${day}/${month}/${year}`;
 }
 
-function sortSlots(a: Slot, b: Slot) {
+function sortSlots(a: SlotRow, b: SlotRow) {
   const byDate = a.date.localeCompare(b.date);
   if (byDate !== 0) return byDate;
   return a.time.localeCompare(b.time);
-}
-
-function makeId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function buildSlot(date: string, time: string): Slot {
-  return {
-    id: makeId(),
-    date,
-    time,
-    players: [],
-  };
-}
-
-function buildInitialState(): Slot[] {
-  const date = todayISO();
-  return DEFAULT_TIMES.map((time) => buildSlot(date, time));
 }
 
 function cardStyle(): React.CSSProperties {
@@ -90,145 +73,119 @@ function inputStyle(): React.CSSProperties {
 }
 
 export default function Page() {
-  const [adminMode, setAdminMode] = useState(true);
-  const [title, setTitle] = useState('Reservas de pádel');
-  const [slots, setSlots] = useState<Slot[]>(buildInitialState);
-  const [nameInputs, setNameInputs] = useState<Record<string, string>>({});
-  const [newDate, setNewDate] = useState(todayISO());
-  const [newTime, setNewTime] = useState('08:00');
+  const [slots, setSlots] = useState<SlotRow[]>([]);
+  const [players, setPlayers] = useState<PlayerRow[]>([]);
+  const [nameInputs, setNameInputs] = useState<Record<number, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  async function loadData() {
+    setLoading(true);
+    setError('');
+
+    const [{ data: slotsData, error: slotsError }, { data: playersData, error: playersError }] =
+      await Promise.all([
+        supabase.from('slots').select('*').order('date', { ascending: true }).order('time', { ascending: true }),
+        supabase.from('players').select('*').order('created_at', { ascending: true }),
+      ]);
+
+    if (slotsError || playersError) {
+      setError(slotsError?.message || playersError?.message || 'Error cargando datos');
+      setLoading(false);
+      return;
+    }
+
+    setSlots((slotsData || []) as SlotRow[]);
+    setPlayers((playersData || []) as PlayerRow[]);
+    setLoading(false);
+  }
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return;
+    loadData();
 
-    try {
-      const parsed = JSON.parse(saved);
-      if (parsed?.title) setTitle(parsed.title);
-      if (Array.isArray(parsed?.slots)) {
-        setSlots(parsed.slots.sort(sortSlots));
-      }
-    } catch {}
+    const channel = supabase
+      .channel('padel-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () => loadData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        title,
-        slots,
-      })
-    );
-  }, [title, slots]);
-
-  const totals = useMemo(() => {
-    const totalPlayers = slots.reduce((acc, slot) => acc + slot.players.length, 0);
-    const totalPaid = slots.reduce(
-      (acc, slot) => acc + slot.players.filter((player) => player.paid).length,
-      0
-    );
-    const openSlots = slots.filter((slot) => slot.players.length < MAX_PLAYERS).length;
-    return { totalPlayers, totalPaid, openSlots };
-  }, [slots]);
+  const slotsWithPlayers = useMemo<SlotWithPlayers[]>(() => {
+    return [...slots]
+      .sort(sortSlots)
+      .map((slot) => ({
+        ...slot,
+        players: players.filter((player) => player.slot_id === slot.id),
+      }));
+  }, [slots, players]);
 
   const groupedSlots = useMemo(() => {
-    const sorted = [...slots].sort(sortSlots);
-    return sorted.reduce<Record<string, Slot[]>>((acc, slot) => {
+    return slotsWithPlayers.reduce<Record<string, SlotWithPlayers[]>>((acc, slot) => {
       if (!acc[slot.date]) acc[slot.date] = [];
       acc[slot.date].push(slot);
       return acc;
     }, {});
-  }, [slots]);
+  }, [slotsWithPlayers]);
 
-  function addSlot() {
-    if (!newDate || !newTime) return;
+  const totalPlayers = players.length;
+  const totalPaid = players.filter((p) => p.paid).length;
+  const openSlots = slotsWithPlayers.filter((slot) => slot.players.length < MAX_PLAYERS).length;
 
-    setSlots((prev) => {
-      const exists = prev.some((slot) => slot.date === newDate && slot.time === newTime);
-      if (exists) return prev;
-      return [...prev, buildSlot(newDate, newTime)].sort(sortSlots);
-    });
-  }
-
-  function removeSlot(slotId: string) {
-    setSlots((prev) => prev.filter((slot) => slot.id !== slotId));
-  }
-
-  function addPlayer(slotId: string) {
+  async function addPlayer(slotId: number) {
     const name = (nameInputs[slotId] || '').trim();
     if (!name) return;
 
-    setSlots((prev) =>
-      prev.map((slot) => {
-        if (slot.id !== slotId) return slot;
-        if (slot.players.length >= MAX_PLAYERS) return slot;
-        if (slot.players.some((player) => player.name.toLowerCase() === name.toLowerCase())) {
-          return slot;
-        }
+    const slot = slotsWithPlayers.find((s) => s.id === slotId);
+    if (!slot) return;
+    if (slot.players.length >= MAX_PLAYERS) return;
 
-        return {
-          ...slot,
-          players: [...slot.players, { id: makeId(), name, paid: false }],
-        };
-      })
+    const duplicate = slot.players.some(
+      (player) => player.name.trim().toLowerCase() === name.toLowerCase()
     );
+    if (duplicate) {
+      alert('Ese nombre ya está anotado en este turno');
+      return;
+    }
+
+    const { error } = await supabase.from('players').insert({
+      slot_id: slotId,
+      name,
+      paid: false,
+    });
+
+    if (error) {
+      alert(`No se pudo anotar: ${error.message}`);
+      return;
+    }
 
     setNameInputs((prev) => ({ ...prev, [slotId]: '' }));
+    await loadData();
   }
 
-  function removePlayer(slotId: string, playerId: string) {
-    setSlots((prev) =>
-      prev.map((slot) =>
-        slot.id === slotId
-          ? { ...slot, players: slot.players.filter((player) => player.id !== playerId) }
-          : slot
-      )
-    );
-  }
+  async function removePlayer(playerId: number) {
+    const { error } = await supabase.from('players').delete().eq('id', playerId);
 
-  function togglePaid(slotId: string, playerId: string) {
-    setSlots((prev) =>
-      prev.map((slot) =>
-        slot.id === slotId
-          ? {
-              ...slot,
-              players: slot.players.map((player) =>
-                player.id === playerId ? { ...player, paid: !player.paid } : player
-              ),
-            }
-          : slot
-      )
-    );
-  }
-
-  function clearAll() {
-    setSlots(buildInitialState());
-    setNameInputs({});
-  }
-
-  async function copySummary() {
-    const text = [
-      title,
-      ...Object.entries(groupedSlots).flatMap(([date, daySlots]) => [
-        formatDate(date),
-        ...daySlots.map((slot) => {
-          const playersText = slot.players.length
-            ? slot.players.map((player) => `${player.name}${player.paid ? ' ✅' : ' ⏳'}`).join(', ')
-            : 'sin anotados';
-          return `${slot.time}: ${playersText}`;
-        }),
-      ]),
-    ].join('\\n');
-
-    try {
-      await navigator.clipboard.writeText(text);
-      alert('Resumen copiado');
-    } catch {
-      alert('No se pudo copiar el resumen');
+    if (error) {
+      alert(`No se pudo borrar: ${error.message}`);
+      return;
     }
+
+    await loadData();
   }
 
   return (
-    <main style={{ minHeight: '100vh', background: '#f8fafc', padding: 24, fontFamily: 'Arial, sans-serif' }}>
+    <main
+      style={{
+        minHeight: '100vh',
+        background: '#f8fafc',
+        padding: 24,
+        fontFamily: 'Arial, sans-serif',
+      }}
+    >
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <div
           style={{
@@ -243,19 +200,19 @@ export default function Page() {
           }}
         >
           <div>
-            <div style={{ color: '#64748b', fontSize: 14 }}>Mini web de reservas para pádel</div>
-            <h1 style={{ margin: '8px 0', fontSize: 34, color: '#0f172a' }}>{title}</h1>
+            <div style={{ color: '#64748b', fontSize: 14 }}>Reservas compartidas de pádel</div>
+            <h1 style={{ margin: '8px 0', fontSize: 34, color: '#0f172a' }}>
+              Reservas de pádel
+            </h1>
             <div style={{ color: '#475569', fontSize: 14 }}>
-              Compartís un link, cada uno se anota y vos controlás pagos sin llenar WhatsApp.
+              Vos cargás los turnos y el grupo se anota acá.
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button style={buttonStyle(adminMode ? 'primary' : 'secondary')} onClick={() => setAdminMode((v) => !v)}>
-              {adminMode ? 'Modo admin' : 'Modo jugador'}
+            <button style={buttonStyle('secondary')} onClick={loadData}>
+              Refrescar
             </button>
-            <button style={buttonStyle('secondary')} onClick={copySummary}>Copiar resumen</button>
-            <button style={buttonStyle('secondary')} onClick={clearAll}>Reiniciar</button>
           </div>
         </div>
 
@@ -268,50 +225,41 @@ export default function Page() {
           }}
         >
           {[
-            ['Anotados', String(totals.totalPlayers)],
-            ['Pagados', String(totals.totalPaid)],
-            ['Turnos abiertos', String(totals.openSlots)],
+            ['Anotados', String(totalPlayers)],
+            ['Pagados', String(totalPaid)],
+            ['Turnos abiertos', String(openSlots)],
           ].map(([label, value]) => (
             <div key={label} style={{ ...cardStyle(), padding: 20 }}>
               <div style={{ color: '#64748b', fontSize: 14 }}>{label}</div>
               <div style={{ fontSize: 30, fontWeight: 700, marginTop: 6 }}>{value}</div>
             </div>
           ))}
-
-          <div style={{ ...cardStyle(), padding: 20 }}>
-            <div style={{ color: '#64748b', fontSize: 14, marginBottom: 8 }}>Título</div>
-            <input style={inputStyle()} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Reservas de pádel" />
-          </div>
         </div>
 
-        <div style={{ ...cardStyle(), padding: 20, marginBottom: 20 }}>
-          <h2 style={{ marginTop: 0 }}>Agregar turno</h2>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 12,
-              alignItems: 'end',
-            }}
-          >
-            <div>
-              <div style={{ color: '#64748b', fontSize: 14, marginBottom: 8 }}>Fecha</div>
-              <input style={inputStyle()} type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
-            </div>
-            <div>
-              <div style={{ color: '#64748b', fontSize: 14, marginBottom: 8 }}>Hora</div>
-              <input style={inputStyle()} type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} />
-            </div>
-            <div>
-              <button style={buttonStyle()} onClick={addSlot}>Agregar turno</button>
-            </div>
+        {loading && (
+          <div style={{ ...cardStyle(), padding: 20, marginBottom: 20 }}>
+            Cargando turnos...
           </div>
-        </div>
+        )}
+
+        {!!error && (
+          <div style={{ ...cardStyle(), padding: 20, marginBottom: 20, color: '#b91c1c' }}>
+            Error: {error}
+          </div>
+        )}
+
+        {!loading && slotsWithPlayers.length === 0 && (
+          <div style={{ ...cardStyle(), padding: 20, marginBottom: 20 }}>
+            No hay turnos cargados todavía. Cargalos en Supabase y van a aparecer acá.
+          </div>
+        )}
 
         <div style={{ display: 'grid', gap: 24 }}>
           {Object.entries(groupedSlots).map(([date, daySlots]) => (
             <div key={date}>
-              <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>{formatDate(date)}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
+                {formatDate(date)}
+              </div>
 
               <div
                 style={{
@@ -325,45 +273,62 @@ export default function Page() {
 
                   return (
                     <div key={slot.id} style={{ ...cardStyle(), padding: 18 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          alignItems: 'center',
+                          marginBottom: 14,
+                        }}
+                      >
                         <div style={{ fontSize: 24, fontWeight: 700 }}>{slot.time}</div>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <div
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: 999,
-                              background: full ? '#111827' : '#e5e7eb',
-                              color: full ? 'white' : '#111827',
-                              fontSize: 13,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {slot.players.length}/{MAX_PLAYERS}
-                          </div>
-                          {adminMode && (
-                            <button style={buttonStyle('secondary')} onClick={() => removeSlot(slot.id)}>Borrar turno</button>
-                          )}
+
+                        <div
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: 999,
+                            background: full ? '#111827' : '#e5e7eb',
+                            color: full ? 'white' : '#111827',
+                            fontSize: 13,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {slot.players.length}/{MAX_PLAYERS}
                         </div>
                       </div>
 
                       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                         <input
                           style={inputStyle()}
-                          placeholder="Nombre"
+                          placeholder="Tu nombre"
                           value={nameInputs[slot.id] || ''}
-                          onChange={(e) => setNameInputs((prev) => ({ ...prev, [slot.id]: e.target.value }))}
+                          onChange={(e) =>
+                            setNameInputs((prev) => ({ ...prev, [slot.id]: e.target.value }))
+                          }
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') addPlayer(slot.id);
                           }}
                         />
-                        <button style={buttonStyle(full ? 'secondary' : 'primary')} disabled={full} onClick={() => addPlayer(slot.id)}>
+                        <button
+                          style={buttonStyle(full ? 'secondary' : 'primary')}
+                          disabled={full}
+                          onClick={() => addPlayer(slot.id)}
+                        >
                           Anotar
                         </button>
                       </div>
 
                       <div style={{ display: 'grid', gap: 8 }}>
                         {slot.players.length === 0 && (
-                          <div style={{ padding: 14, border: '1px dashed #cbd5e1', borderRadius: 16, color: '#64748b' }}>
+                          <div
+                            style={{
+                              padding: 14,
+                              border: '1px dashed #cbd5e1',
+                              borderRadius: 16,
+                              color: '#64748b',
+                            }}
+                          >
                             Todavía no hay jugadores anotados.
                           </div>
                         )}
@@ -389,21 +354,12 @@ export default function Page() {
                               </div>
                             </div>
 
-                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                              <label style={{ display: 'flex', gap: 6, alignItems: 'center', color: adminMode ? '#111827' : '#94a3b8' }}>
-                                <input
-                                  type="checkbox"
-                                  checked={player.paid}
-                                  onChange={() => togglePaid(slot.id, player.id)}
-                                  disabled={!adminMode}
-                                />
-                                Pagó
-                              </label>
-
-                              <button style={buttonStyle('secondary')} onClick={() => removePlayer(slot.id, player.id)}>
-                                Borrarme
-                              </button>
-                            </div>
+                            <button
+                              style={buttonStyle('secondary')}
+                              onClick={() => removePlayer(player.id)}
+                            >
+                              Borrarme
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -415,9 +371,19 @@ export default function Page() {
           ))}
         </div>
 
-        <div style={{ ...cardStyle(), padding: 20, marginTop: 20, color: '#475569', fontSize: 14, lineHeight: 1.5 }}>
-          <strong>Nota:</strong> este prototipo guarda los datos solo en tu navegador. Para compartir un link real entre todos,
-          el siguiente paso es conectarlo a una base de datos gratuita.
+        <div
+          style={{
+            ...cardStyle(),
+            padding: 20,
+            marginTop: 20,
+            color: '#475569',
+            fontSize: 14,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>Importante:</strong> por ahora vos cargás los turnos en Supabase y la gente se
+          anota acá. En la próxima versión te puedo dejar una pantalla admin para crear turnos desde
+          la web.
         </div>
       </div>
     </main>
