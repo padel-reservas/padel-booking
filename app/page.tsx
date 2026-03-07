@@ -410,20 +410,19 @@ export default function Page() {
                       }}
                     >
                       <input
-                        placeholder="Tu nombre"
-                        value={nameInput[slot.id] ?? defaultName}
-                        onChange={(e) =>
-                          setNameInput((v) => ({ ...v, [slot.id]: e.target.value }))
-                        }
-                        style={{
-                          flex: 1,
-                          minWidth: 180,
-                          padding: '10px 12px',
-                          borderRadius: 12,
-                          border: '1px solid #d1d5db',
-                        }}
-                      />
-
+  placeholder={defaultName || 'Tu nombre'}
+  value={nameInput[slot.id] ?? ''}
+  onChange={(e) =>
+    setNameInput((v) => ({ ...v, [slot.id]: e.target.value }))
+  }
+  style={{
+    flex: 1,
+    minWidth: 180,
+    padding: '10px 12px',
+    borderRadius: 12,
+    border: '1px solid #d1d5db',
+  }}
+/>
                       <button
                         disabled={isFull}
                         onClick={() => addPlayer(slot.id)}
