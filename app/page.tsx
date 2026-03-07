@@ -61,13 +61,16 @@ export default function Page() {
 
   async function loadData() {
     setLoading(true);
+
     const { data: slotsData } = await supabase
       .from('slots')
       .select('*')
       .order('date')
       .order('time');
 
-    const { data: playersData } = await supabase.from('players').select('*');
+    const { data: playersData } = await supabase
+      .from('players')
+      .select('*');
 
     setSlots(slotsData || []);
     setPlayers(playersData || []);
@@ -99,52 +102,40 @@ export default function Page() {
   }, [slotsWithPlayers]);
 
   async function addPlayer(slotId: number) {
-  const rawName = (nameInput[slotId] ?? defaultName).trim();
-  if (!rawName) {
-    alert('Poné tu nombre');
-    return;
-  }
+    const rawName = (nameInput[slotId] ?? defaultName).trim();
 
-  const slot = slotsWithPlayers.find((s) => s.id === slotId);
-  if (!slot) return;
+    if (!rawName) {
+      alert('Poné tu nombre');
+      return;
+    }
 
-  if (slot.players.length >= MAX_PLAYERS) {
-    alert('Ese turno ya está completo');
-    return;
-  }
+    const slot = slotsWithPlayers.find((s) => s.id === slotId);
+    if (!slot) return;
 
-  const alreadyThere = slot.players.some(
-    (p) => p.name.trim().toLowerCase() === rawName.toLowerCase()
-  );
-  if (alreadyThere) {
-    alert('Ese nombre ya está anotado en este turno');
-    return;
-  }
+    if (slot.players.length >= MAX_PLAYERS) {
+      alert('Ese turno ya está completo');
+      return;
+    }
 
-  await supabase.from('players').insert({
-    slot_id: slotId,
-    name: rawName,
-    paid: false,
-  });
-
-  localStorage.setItem(PLAYER_NAME_KEY, rawName);
-  setDefaultName(rawName);
-  setNameInput((v) => ({ ...v, [slotId]: '' }));
-  loadData();
-}
     const alreadyThere = slot.players.some(
       (p) => p.name.trim().toLowerCase() === rawName.toLowerCase()
     );
+
     if (alreadyThere) {
       alert('Ese nombre ya está anotado en este turno');
       return;
     }
 
-    await supabase.from('players').insert({
+    const { error } = await supabase.from('players').insert({
       slot_id: slotId,
       name: rawName,
       paid: false,
     });
+
+    if (error) {
+      alert(`No se pudo anotar: ${error.message}`);
+      return;
+    }
 
     localStorage.setItem(PLAYER_NAME_KEY, rawName);
     setDefaultName(rawName);
@@ -158,22 +149,22 @@ export default function Page() {
   }
 
   async function adminAction(action: any) {
-  const res = await fetch('/api/admin', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...action, pin }),
-  });
+    const res = await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...action, pin }),
+    });
 
-  const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => ({}));
 
-  if (res.ok) {
-    loadData();
-    return true;
+    if (res.ok) {
+      loadData();
+      return true;
+    }
+
+    alert(data.error || `Error admin (${res.status})`);
+    return false;
   }
-
-  alert(data.error || `Error admin (${res.status})`);
-  return false;
-}
 
   async function unlockAdmin() {
     const ok = await adminAction({ action: 'noop' });
@@ -429,19 +420,21 @@ export default function Page() {
                       }}
                     >
                       <input
-  placeholder={defaultName || 'Tu nombre'}
-  value={nameInput[slot.id] ?? ''}
-  onChange={(e) =>
-    setNameInput((v) => ({ ...v, [slot.id]: e.target.value }))
-  }
-  style={{
-    flex: 1,
-    minWidth: 180,
-    padding: '10px 12px',
-    borderRadius: 12,
-    border: '1px solid #d1d5db',
-  }}
-/>
+                        placeholder={defaultName || 'Tu nombre'}
+                        value={nameInput[slot.id] ?? ''}
+                        onChange={(e) =>
+                          setNameInput((v) => ({ ...v, [slot.id]: e.target.value }))
+                        }
+                        autoComplete="off"
+                        style={{
+                          flex: 1,
+                          minWidth: 180,
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          border: '1px solid #d1d5db',
+                        }}
+                      />
+
                       <button
                         disabled={isFull}
                         onClick={() => addPlayer(slot.id)}
