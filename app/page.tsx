@@ -139,20 +139,22 @@ export default function Page() {
   }
 
   async function adminAction(action: any) {
-    const res = await fetch('/api/admin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...action, pin }),
-    });
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...action, pin }),
+  });
 
-    if (res.ok) {
-      loadData();
-      return true;
-    }
+  const data = await res.json().catch(() => ({}));
 
-    alert('PIN incorrecto o error admin');
-    return false;
+  if (res.ok) {
+    loadData();
+    return true;
   }
+
+  alert(data.error || `Error admin (${res.status})`);
+  return false;
+}
 
   async function unlockAdmin() {
     const ok = await adminAction({ action: 'noop' });
