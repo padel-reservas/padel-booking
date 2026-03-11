@@ -21,6 +21,7 @@ type Player = {
   slot_id: number;
   name: string;
   paid: boolean;
+  created_at?: string;
 };
 
 function todayISO() {
@@ -37,6 +38,14 @@ function formatDate(dateStr: string) {
     weekday: 'short',
     day: 'numeric',
     month: 'numeric',
+  });
+}
+
+function sortPlayers(players: Player[]) {
+  return [...players].sort((a, b) => {
+    const aTime = a.created_at || '';
+    const bTime = b.created_at || '';
+    return aTime.localeCompare(bTime);
   });
 }
 
@@ -66,7 +75,10 @@ export default function Page() {
       .order('date')
       .order('time');
 
-    const { data: playersData } = await supabase.from('players').select('*');
+    const { data: playersData } = await supabase
+      .from('players')
+      .select('*')
+      .order('created_at', { ascending: true });
 
     setSlots(slotsData || []);
     setPlayers(playersData || []);
@@ -78,12 +90,16 @@ export default function Page() {
   }, []);
 
   const slotsWithPlayers = useMemo(() => {
-    return slots.map((s) => ({
-      ...s,
-      players: players
-        .filter((p) => p.slot_id === s.id)
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    }));
+    return slots.map((s) => {
+      const allPlayers = sortPlayers(players.filter((p) => p.slot_id === s.id));
+
+      return {
+        ...s,
+        allPlayers,
+        activePlayers: allPlayers.slice(0, MAX_PLAYERS),
+        waitlistPlayers: allPlayers.slice(MAX_PLAYERS),
+      };
+    });
   }, [slots, players]);
 
   const groupedSlots = useMemo(() => {
@@ -106,12 +122,7 @@ export default function Page() {
     const slot = slotsWithPlayers.find((s) => s.id === slotId);
     if (!slot) return;
 
-    if (slot.players.length >= MAX_PLAYERS) {
-      alert('Ese turno ya está completo');
-      return;
-    }
-
-    const alreadyThere = slot.players.some(
+    const alreadyThere = slot.allPlayers.some(
       (p) => p.name.trim().toLowerCase() === rawName.toLowerCase()
     );
 
@@ -344,7 +355,7 @@ export default function Page() {
 
             <div style={{ display: 'grid', gap: 12 }}>
               {daySlots.map((slot) => {
-                const isFull = slot.players.length >= MAX_PLAYERS;
+                const isFull = slot.activePlayers.length >= MAX_PLAYERS;
 
                 return (
                   <div
@@ -378,8 +389,24 @@ export default function Page() {
                             fontSize: 12,
                           }}
                         >
-                          {isFull ? 'COMPLETO' : `${slot.players.length}/${MAX_PLAYERS}`}
+                          {isFull ? 'COMPLETO' : `${slot.activePlayers.length}/${MAX_PLAYERS}`}
                         </div>
+
+                        {slot.waitlistPlayers.length > 0 && (
+                          <div
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: 999,
+                              background: '#f1f5f9',
+                              color: '#111827',
+                              fontWeight: 700,
+                              fontSize: 12,
+                              border: '1px solid #cbd5e1',
+                            }}
+                          >
+                            Espera: {slot.waitlistPlayers.length}
+                          </div>
+                        )}
 
                         {adminUnlocked && (
                           <button
@@ -413,7 +440,7 @@ export default function Page() {
                       }}
                     >
                       <input
-                        placeholder="Tu nombre"
+                        placeholder={isFull ? 'Anotate en lista de espera' : 'Tu nombre'}
                         value={nameInput[slot.id] || ''}
                         onChange={(e) =>
                           setNameInput((v) => ({ ...v, [slot.id]: e.target.value }))
@@ -431,58 +458,76 @@ export default function Page() {
                       />
 
                       <button
-                        disabled={isFull}
                         onClick={() => addPlayer(slot.id)}
                         style={{
                           padding: '10px 14px',
                           borderRadius: 12,
                           border: 'none',
-                          background: isFull ? '#cbd5e1' : '#111827',
+                          background: '#111827',
                           color: 'white',
-                          cursor: isFull ? 'not-allowed' : 'pointer',
+                          cursor: 'pointer',
                           fontWeight: 700,
                         }}
                       >
-                        Anotar
+                        {isFull ? 'Lista de espera' : 'Anotar'}
                       </button>
                     </div>
 
-                    {slot.players.length === 0 ? (
-                      <div style={{ color: '#64748b' }}>Todavía no hay jugadores anotados.</div>
-                    ) : (
-                      <div style={{ display: 'grid', gap: 8 }}>
-                        {slot.players.map((p) => (
-                          <div
-                            key={p.id}
-                            style={{
-                              border: '1px solid #e5e7eb',
-                              borderRadius: 14,
-                              padding: 12,
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              gap: 8,
-                              alignItems: 'center',
-                              flexWrap: 'wrap',
-                              background: '#f8fafc',
-                            }}
-                          >
-                            <div>
-                              <div style={{ fontWeight: 700 }}>{p.name}</div>
-                              <div style={{ fontSize: 13, color: '#64748b' }}>
-                                {p.paid ? 'Pago registrado' : 'Pendiente de pago'}
-                              </div>
-                            </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Jugadores</div>
 
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                              {adminUnlocked && (
+                      {slot.activePlayers.length === 0 ? (
+                        <div style={{ color: '#64748b' }}>Todavía no hay jugadores anotados.</div>
+                      ) : (
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          {slot.activePlayers.map((p, index) => (
+                            <div
+                              key={p.id}
+                              style={{
+                                border: '1px solid #e5e7eb',
+                                borderRadius: 14,
+                                padding: 12,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                background: '#f8fafc',
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 700 }}>
+                                  {index + 1}. {p.name}
+                                </div>
+                                <div style={{ fontSize: 13, color: '#64748b' }}>
+                                  {p.paid ? 'Pago registrado' : 'Pendiente de pago'}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {adminUnlocked && (
+                                  <button
+                                    onClick={() =>
+                                      adminAction({
+                                        action: 'togglePaid',
+                                        playerId: p.id,
+                                        paid: !p.paid,
+                                      })
+                                    }
+                                    style={{
+                                      padding: '8px 10px',
+                                      borderRadius: 10,
+                                      border: '1px solid #d1d5db',
+                                      background: 'white',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    {p.paid ? 'Desmarcar pago' : 'Marcar pago'}
+                                  </button>
+                                )}
+
                                 <button
-                                  onClick={() =>
-                                    adminAction({
-                                      action: 'togglePaid',
-                                      playerId: p.id,
-                                      paid: !p.paid,
-                                    })
-                                  }
+                                  onClick={() => removePlayer(p.id)}
                                   style={{
                                     padding: '8px 10px',
                                     borderRadius: 10,
@@ -491,9 +536,42 @@ export default function Page() {
                                     cursor: 'pointer',
                                   }}
                                 >
-                                  {p.paid ? 'Desmarcar pago' : 'Marcar pago'}
+                                  Borrarme
                                 </button>
-                              )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {slot.waitlistPlayers.length > 0 && (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 8 }}>Lista de espera</div>
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          {slot.waitlistPlayers.map((p, index) => (
+                            <div
+                              key={p.id}
+                              style={{
+                                border: '1px dashed #cbd5e1',
+                                borderRadius: 14,
+                                padding: 12,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                background: '#f8fafc',
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 700 }}>
+                                  {MAX_PLAYERS + index + 1}. {p.name}
+                                </div>
+                                <div style={{ fontSize: 13, color: '#64748b' }}>
+                                  En espera
+                                </div>
+                              </div>
 
                               <button
                                 onClick={() => removePlayer(p.id)}
@@ -508,8 +586,8 @@ export default function Page() {
                                 Borrarme
                               </button>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
