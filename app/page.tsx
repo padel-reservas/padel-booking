@@ -479,27 +479,6 @@ export default function Page() {
       rankingPlayers
     );
 
-    alert(
-      JSON.stringify(
-        {
-          slotPlayersSelected: {
-            teamA1: resultForm.teamA1,
-            teamA2: resultForm.teamA2,
-            teamB1: resultForm.teamB1,
-            teamB2: resultForm.teamB2,
-          },
-          rankingIdsMapped: {
-            teamA1: rankingIdA1,
-            teamA2: rankingIdA2,
-            teamB1: rankingIdB1,
-            teamB2: rankingIdB2,
-          },
-        },
-        null,
-        2
-      )
-    );
-
     if (!rankingIdA1 || !rankingIdA2 || !rankingIdB1 || !rankingIdB2) {
       alert(
         'Uno o más jugadores del turno no existen en ranking_players. Revisá que los nombres coincidan exactamente con los del ranking.'
@@ -552,6 +531,23 @@ export default function Page() {
     }
 
     closeResultModal();
+    await loadData();
+  }
+
+  async function deleteResult(slotId: number) {
+    const slot = slotsWithPlayers.find((s) => s.id === slotId);
+    if (!slot || !slot.match) return;
+
+    const ok = window.confirm('¿Seguro que querés borrar este resultado?');
+    if (!ok) return;
+
+    const { error } = await supabase.from('matches').delete().eq('id', slot.match.id);
+
+    if (error) {
+      alert(`No se pudo borrar el resultado: ${error.message}`);
+      return;
+    }
+
     await loadData();
   }
 
@@ -925,21 +921,55 @@ export default function Page() {
                           </button>
                         )}
 
-                        {slot.activePlayers.length === 4 && hasMatch && adminUnlocked && (
+                        {slot.activePlayers.length === 4 && hasMatch && (
                           <button
                             onClick={() => openEditResultModal(slot.id)}
                             style={{
                               padding: '10px 14px',
                               borderRadius: 12,
-                              border: 'none',
-                              background: '#7c3aed',
-                              color: 'white',
+                              border: '1px solid #d1d5db',
+                              background: 'white',
+                              color: '#111827',
                               cursor: 'pointer',
                               fontWeight: 700,
                             }}
                           >
-                            Editar resultado
+                            Ver resultado
                           </button>
+                        )}
+
+                        {slot.activePlayers.length === 4 && hasMatch && adminUnlocked && (
+                          <>
+                            <button
+                              onClick={() => openEditResultModal(slot.id)}
+                              style={{
+                                padding: '10px 14px',
+                                borderRadius: 12,
+                                border: 'none',
+                                background: '#7c3aed',
+                                color: 'white',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                              }}
+                            >
+                              Editar resultado
+                            </button>
+
+                            <button
+                              onClick={() => deleteResult(slot.id)}
+                              style={{
+                                padding: '10px 14px',
+                                borderRadius: 12,
+                                border: 'none',
+                                background: '#b91c1c',
+                                color: 'white',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                              }}
+                            >
+                              Borrar resultado
+                            </button>
+                          </>
                         )}
                       </div>
 
