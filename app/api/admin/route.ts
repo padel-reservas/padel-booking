@@ -59,6 +59,81 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'saveMatch') {
+      const {
+        matchId,
+        match_date,
+        match_time,
+        slot_id,
+        team_a_player_1_id,
+        team_a_player_2_id,
+        team_b_player_1_id,
+        team_b_player_2_id,
+        set1_a,
+        set1_b,
+        set2_a,
+        set2_b,
+        set3_a,
+        set3_b,
+        winner_team,
+        source,
+        notes,
+      } = body;
+
+      const payload = {
+        match_date,
+        match_time,
+        slot_id,
+        team_a_player_1_id,
+        team_a_player_2_id,
+        team_b_player_1_id,
+        team_b_player_2_id,
+        set1_a,
+        set1_b,
+        set2_a,
+        set2_b,
+        set3_a,
+        set3_b,
+        winner_team,
+        source: source || 'slot',
+        notes: notes || null,
+      };
+
+      if (matchId) {
+        const { error } = await supabase.from('matches').update(payload).eq('id', matchId);
+
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+
+        return NextResponse.json({ ok: true, mode: 'updated' });
+      }
+
+      const { error } = await supabase.from('matches').insert(payload);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ ok: true, mode: 'inserted' });
+    }
+
+    if (action === 'deleteMatch') {
+      const { matchId } = body;
+
+      if (!matchId) {
+        return NextResponse.json({ error: 'Falta matchId' }, { status: 400 });
+      }
+
+      const { error } = await supabase.from('matches').delete().eq('id', matchId);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ ok: true, mode: 'deleted' });
+    }
+
     return NextResponse.json({ error: 'Acción inválida' }, { status: 400 });
   } catch {
     return NextResponse.json({ error: 'Error interno' }, { status: 500 });
