@@ -108,17 +108,13 @@ export async function POST(req: Request) {
       };
 
       if (matchId) {
-        const { error } = await supabase
-          .from('matches')
-          .update(payload)
-          .eq('id', matchId);
+        const { error } = await supabase.from('matches').update(payload).eq('id', matchId);
 
         if (error) {
           return NextResponse.json({ error: error.message }, { status: 400 });
         }
 
         await runRecalculateRankings();
-
         return NextResponse.json({ ok: true, mode: 'updated' });
       }
 
@@ -129,7 +125,6 @@ export async function POST(req: Request) {
       }
 
       await runRecalculateRankings();
-
       return NextResponse.json({ ok: true, mode: 'inserted' });
     }
 
@@ -147,7 +142,6 @@ export async function POST(req: Request) {
       }
 
       await runRecalculateRankings();
-
       return NextResponse.json({ ok: true, mode: 'deleted' });
     }
 
