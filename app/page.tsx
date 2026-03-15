@@ -479,6 +479,27 @@ export default function Page() {
       rankingPlayers
     );
 
+    alert(
+      JSON.stringify(
+        {
+          slotPlayersSelected: {
+            teamA1: resultForm.teamA1,
+            teamA2: resultForm.teamA2,
+            teamB1: resultForm.teamB1,
+            teamB2: resultForm.teamB2,
+          },
+          rankingIdsMapped: {
+            teamA1: rankingIdA1,
+            teamA2: rankingIdA2,
+            teamB1: rankingIdB1,
+            teamB2: rankingIdB2,
+          },
+        },
+        null,
+        2
+      )
+    );
+
     if (!rankingIdA1 || !rankingIdA2 || !rankingIdB1 || !rankingIdB2) {
       alert(
         'Uno o más jugadores del turno no existen en ranking_players. Revisá que los nombres coincidan exactamente con los del ranking.'
