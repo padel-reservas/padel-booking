@@ -61,6 +61,21 @@ type Match = {
 
 type TabKey = 'turnos' | 'ranking' | 'historial';
 
+type ResultFormState = {
+  slotId: number;
+  teamA1: number | '';
+  teamA2: number | '';
+  teamB1: number | '';
+  teamB2: number | '';
+  set1A: string;
+  set1B: string;
+  set2A: string;
+  set2B: string;
+  set3A: string;
+  set3B: string;
+  notes: string;
+};
+
 function todayISO() {
   const d = new Date();
   const year = d.getFullYear();
@@ -134,6 +149,36 @@ function statsMap(rankingPlayers: RankingPlayer[]) {
   return map;
 }
 
+function parseSetValue(v: string): number | null {
+  const t = v.trim();
+  if (t === '') return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+function computeWinnerTeam(form: ResultFormState): 'A' | 'B' | null {
+  const sets = [
+    [parseSetValue(form.set1A), parseSetValue(form.set1B)],
+    [parseSetValue(form.set2A), parseSetValue(form.set2B)],
+    [parseSetValue(form.set3A), parseSetValue(form.set3B)],
+  ];
+
+  let aWins = 0;
+  let bWins = 0;
+
+  for (const [a, b] of sets) {
+    if (a == null || b == null) continue;
+    if (a > b) aWins += 1;
+    if (b > a) bWins += 1;
+  }
+
+  if (aWins === 0 && bWins === 0) return null;
+  if (aWins > bWins) return 'A';
+  if (bWins > aWins) return 'B';
+  return null;
+}
+
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabKey>('turnos');
 
@@ -149,6 +194,10 @@ export default function Page() {
   const [date, setDate] = useState(todayISO());
   const [time, setTime] = useState('09:00');
   const [loading, setLoading] = useState(true);
+
+  const [resultModalOpen, setResultModalOpen] = useState(false);
+  const [resultForm, setResultForm] = useState<ResultFormState | null>(null);
+  const [savingResult, setSavingResult] = useState(false);
 
   const canSeeAdmin = useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -193,18 +242,30 @@ export default function Page() {
 
   const rankingStats = useMemo(() => statsMap(rankingPlayers), [rankingPlayers]);
 
+  const slotMatchMap = useMemo(() => {
+    const map = new Map<number, Match>();
+    for (const m of matches) {
+      if (m.slot_id != null && !map.has(m.slot_id)) {
+        map.set(m.slot_id, m);
+      }
+    }
+    return map;
+  }, [matches]);
+
   const slotsWithPlayers = useMemo(() => {
     return slots.map((s) => {
       const allPlayers = sortPlayers(slotPlayers.filter((p) => p.slot_id === s.id));
+      const match = slotMatchMap.get(s.id) || null;
 
       return {
         ...s,
         allPlayers,
         activePlayers: allPlayers.slice(0, MAX_PLAYERS),
         waitlistPlayers: allPlayers.slice(MAX_PLAYERS),
+        match,
       };
     });
-  }, [slots, slotPlayers]);
+  }, [slots, slotPlayers, slotMatchMap]);
 
   const groupedSlots = useMemo(() => {
     const grouped: Record<string, typeof slotsWithPlayers> = {};
@@ -282,6 +343,116 @@ export default function Page() {
   async function unlockAdmin() {
     const ok = await adminAction({ action: 'noop' });
     if (ok) setAdminUnlocked(true);
+  }
+
+  function openResultModal(slotId: number) {
+    const slot = slotsWithPlayers.find((s) => s.id === slotId);
+    if (!slot) return;
+    if (slot.activePlayers.length !== 4) {
+      alert('Para cargar resultado el turno debe tener exactamente 4 jugadores.');
+      return;
+    }
+
+    const p1 = slot.activePlayers[0]?.id ?? '';
+    const p2 = slot.activePlayers[1]?.id ?? '';
+    const p3 = slot.activePlayers[2]?.id ?? '';
+    const p4 = slot.activePlayers[3]?.id ?? '';
+
+    setResultForm({
+      slotId,
+      teamA1: p1,
+      teamA2: p2,
+      teamB1: p3,
+      teamB2: p4,
+      set1A: '',
+      set1B: '',
+      set2A: '',
+      set2B: '',
+      set3A: '',
+      set3B: '',
+      notes: '',
+    });
+    setResultModalOpen(true);
+  }
+
+  function closeResultModal() {
+    setResultModalOpen(false);
+    setResultForm(null);
+  }
+
+  async function saveResult() {
+    if (!resultForm) return;
+
+    const slot = slotsWithPlayers.find((s) => s.id === resultForm.slotId);
+    if (!slot) {
+      alert('No se encontró el turno.');
+      return;
+    }
+
+    const selectedIds = [
+      resultForm.teamA1,
+      resultForm.teamA2,
+      resultForm.teamB1,
+      resultForm.teamB2,
+    ];
+
+    if (selectedIds.some((id) => id === '')) {
+      alert('Tenés que elegir los 4 jugadores.');
+      return;
+    }
+
+    const ids = selectedIds as number[];
+    const uniqueIds = new Set(ids);
+    if (uniqueIds.size !== 4) {
+      alert('No podés repetir jugadores en las parejas.');
+      return;
+    }
+
+    const validSlotPlayerIds = new Set(slot.activePlayers.map((p) => p.id));
+    const allValid = ids.every((id) => validSlotPlayerIds.has(id));
+    if (!allValid) {
+      alert('Solo podés usar los 4 jugadores de ese turno.');
+      return;
+    }
+
+    const winnerTeam = computeWinnerTeam(resultForm);
+    if (!winnerTeam) {
+      alert('Cargá al menos un resultado válido para determinar ganador.');
+      return;
+    }
+
+    setSavingResult(true);
+
+    const payload = {
+      match_date: slot.date,
+      match_time: slot.time,
+      slot_id: slot.id,
+      team_a_player_1_id: resultForm.teamA1 as number,
+      team_a_player_2_id: resultForm.teamA2 as number,
+      team_b_player_1_id: resultForm.teamB1 as number,
+      team_b_player_2_id: resultForm.teamB2 as number,
+      set1_a: parseSetValue(resultForm.set1A),
+      set1_b: parseSetValue(resultForm.set1B),
+      set2_a: parseSetValue(resultForm.set2A),
+      set2_b: parseSetValue(resultForm.set2B),
+      set3_a: parseSetValue(resultForm.set3A),
+      set3_b: parseSetValue(resultForm.set3B),
+      winner_team: winnerTeam,
+      source: 'slot',
+      notes: resultForm.notes.trim() || null,
+    };
+
+    const { error } = await supabase.from('matches').insert(payload);
+
+    setSavingResult(false);
+
+    if (error) {
+      alert(`No se pudo guardar el resultado: ${error.message}`);
+      return;
+    }
+
+    closeResultModal();
+    await loadData();
   }
 
   function tabButton(label: string, key: TabKey) {
@@ -504,6 +675,7 @@ export default function Page() {
               <div style={{ display: 'grid', gap: 12 }}>
                 {daySlots.map((slot) => {
                   const isFull = slot.activePlayers.length >= MAX_PLAYERS;
+                  const hasMatch = !!slot.match;
 
                   return (
                     <div
@@ -553,6 +725,22 @@ export default function Page() {
                               }}
                             >
                               Espera: {slot.waitlistPlayers.length}
+                            </div>
+                          )}
+
+                          {hasMatch && (
+                            <div
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 999,
+                                background: '#dcfce7',
+                                color: '#166534',
+                                fontWeight: 700,
+                                fontSize: 12,
+                                border: '1px solid #bbf7d0',
+                              }}
+                            >
+                              Resultado cargado
                             </div>
                           )}
 
@@ -619,6 +807,23 @@ export default function Page() {
                         >
                           {isFull ? 'Lista de espera' : 'Anotar'}
                         </button>
+
+                        {slot.activePlayers.length === 4 && !hasMatch && (
+                          <button
+                            onClick={() => openResultModal(slot.id)}
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: 12,
+                              border: 'none',
+                              background: '#0f766e',
+                              color: 'white',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                            }}
+                          >
+                            Subir resultado
+                          </button>
+                        )}
                       </div>
 
                       <div style={{ marginBottom: 10 }}>
@@ -703,6 +908,31 @@ export default function Page() {
                           </div>
                         )}
                       </div>
+
+                      {hasMatch && slot.match && (
+                        <div
+                          style={{
+                            marginTop: 12,
+                            borderTop: '1px solid #e5e7eb',
+                            paddingTop: 12,
+                            background: '#f8fafc',
+                            borderRadius: 12,
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, marginBottom: 6 }}>Resultado</div>
+                          <div style={{ color: '#334155', marginBottom: 4 }}>
+                            A:{' '}
+                            {playerNameById(rankingPlayers, slot.match.team_a_player_1_id)} /{' '}
+                            {playerNameById(rankingPlayers, slot.match.team_a_player_2_id)}
+                          </div>
+                          <div style={{ color: '#334155', marginBottom: 4 }}>
+                            B:{' '}
+                            {playerNameById(rankingPlayers, slot.match.team_b_player_1_id)} /{' '}
+                            {playerNameById(rankingPlayers, slot.match.team_b_player_2_id)}
+                          </div>
+                          <div style={{ fontWeight: 700 }}>Score: {scoreText(slot.match)}</div>
+                        </div>
+                      )}
 
                       {slot.waitlistPlayers.length > 0 && (
                         <div style={{ marginTop: 14 }}>
@@ -930,6 +1160,294 @@ export default function Page() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {resultModalOpen && resultForm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 720,
+              background: 'white',
+              borderRadius: 20,
+              padding: 20,
+              border: '1px solid #e5e7eb',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <h3 style={{ marginTop: 0, marginBottom: 12 }}>Subir resultado</h3>
+
+            {(() => {
+              const slot = slotsWithPlayers.find((s) => s.id === resultForm.slotId);
+              const players = slot?.activePlayers || [];
+
+              return (
+                <>
+                  <div style={{ color: '#64748b', marginBottom: 14 }}>
+                    Turno {slot?.time} · {slot ? formatDate(slot.date) : ''}
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Pareja A</div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <select
+                          value={resultForm.teamA1}
+                          onChange={(e) =>
+                            setResultForm((prev) =>
+                              prev
+                                ? { ...prev, teamA1: e.target.value === '' ? '' : Number(e.target.value) }
+                                : prev
+                            )
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        >
+                          <option value="">Elegir jugador</option>
+                          {players.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={resultForm.teamA2}
+                          onChange={(e) =>
+                            setResultForm((prev) =>
+                              prev
+                                ? { ...prev, teamA2: e.target.value === '' ? '' : Number(e.target.value) }
+                                : prev
+                            )
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        >
+                          <option value="">Elegir jugador</option>
+                          {players.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Pareja B</div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <select
+                          value={resultForm.teamB1}
+                          onChange={(e) =>
+                            setResultForm((prev) =>
+                              prev
+                                ? { ...prev, teamB1: e.target.value === '' ? '' : Number(e.target.value) }
+                                : prev
+                            )
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        >
+                          <option value="">Elegir jugador</option>
+                          {players.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={resultForm.teamB2}
+                          onChange={(e) =>
+                            setResultForm((prev) =>
+                              prev
+                                ? { ...prev, teamB2: e.target.value === '' ? '' : Number(e.target.value) }
+                                : prev
+                            )
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        >
+                          <option value="">Elegir jugador</option>
+                          {players.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Resultado por sets</div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 80px 80px',
+                          gap: 8,
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div>Set 1</div>
+                        <input
+                          value={resultForm.set1A}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set1A: e.target.value } : prev))
+                          }
+                          placeholder="A"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+                        <input
+                          value={resultForm.set1B}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set1B: e.target.value } : prev))
+                          }
+                          placeholder="B"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+
+                        <div>Set 2</div>
+                        <input
+                          value={resultForm.set2A}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set2A: e.target.value } : prev))
+                          }
+                          placeholder="A"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+                        <input
+                          value={resultForm.set2B}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set2B: e.target.value } : prev))
+                          }
+                          placeholder="B"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+
+                        <div>Set 3</div>
+                        <input
+                          value={resultForm.set3A}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set3A: e.target.value } : prev))
+                          }
+                          placeholder="A"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+                        <input
+                          value={resultForm.set3B}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set3B: e.target.value } : prev))
+                          }
+                          placeholder="B"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Notas</div>
+                      <textarea
+                        value={resultForm.notes}
+                        onChange={(e) =>
+                          setResultForm((prev) => (prev ? { ...prev, notes: e.target.value } : prev))
+                        }
+                        rows={3}
+                        placeholder="Opcional"
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          border: '1px solid #d1d5db',
+                          resize: 'vertical',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
+              <button
+                onClick={closeResultModal}
+                disabled={savingResult}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid #d1d5db',
+                  background: 'white',
+                  cursor: savingResult ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={saveResult}
+                disabled={savingResult}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: '#111827',
+                  color: 'white',
+                  cursor: savingResult ? 'not-allowed' : 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                {savingResult ? 'Guardando...' : 'Guardar resultado'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
