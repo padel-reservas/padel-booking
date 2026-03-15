@@ -9,21 +9,10 @@ const supabase = createClient(supabaseUrl, serviceRoleKey);
 
 async function runRecalculateRankings() {
   const { error } = await supabase.rpc('recalculate_rankings');
+
   if (error) {
     throw new Error(`No se pudo recalcular rankings: ${error.message}`);
   }
-
-  const { data: runs, error: runsError } = await supabase
-    .from('ranking_recalc_runs')
-    .select('id, created_at')
-    .order('id', { ascending: false })
-    .limit(1);
-
-  if (runsError) {
-    throw new Error(`Recalculó pero no pude leer ranking_recalc_runs: ${runsError.message}`);
-  }
-
-  return runs?.[0] || null;
 }
 
 export async function POST(req: Request) {
@@ -119,19 +108,18 @@ export async function POST(req: Request) {
       };
 
       if (matchId) {
-        const { error } = await supabase.from('matches').update(payload).eq('id', matchId);
+        const { error } = await supabase
+          .from('matches')
+          .update(payload)
+          .eq('id', matchId);
 
         if (error) {
           return NextResponse.json({ error: error.message }, { status: 400 });
         }
 
-        const recalcRun = await runRecalculateRankings();
+        await runRecalculateRankings();
 
-        return NextResponse.json({
-          ok: true,
-          mode: 'updated',
-          recalcRun,
-        });
+        return NextResponse.json({ ok: true, mode: 'updated' });
       }
 
       const { error } = await supabase.from('matches').insert(payload);
@@ -140,13 +128,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
-      const recalcRun = await runRecalculateRankings();
+      await runRecalculateRankings();
 
-      return NextResponse.json({
-        ok: true,
-        mode: 'inserted',
-        recalcRun,
-      });
+      return NextResponse.json({ ok: true, mode: 'inserted' });
     }
 
     if (action === 'deleteMatch') {
@@ -162,13 +146,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
-      const recalcRun = await runRecalculateRankings();
+      await runRecalculateRankings();
 
-      return NextResponse.json({
-        ok: true,
-        mode: 'deleted',
-        recalcRun,
-      });
+      return NextResponse.json({ ok: true, mode: 'deleted' });
     }
 
     return NextResponse.json({ error: 'Acción inválida' }, { status: 400 });
