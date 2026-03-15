@@ -63,6 +63,7 @@ type TabKey = 'turnos' | 'ranking' | 'historial';
 
 type ResultFormState = {
   slotId: number;
+  editingMatchId: number | null;
   teamA1: number | '';
   teamA2: number | '';
   teamB1: number | '';
@@ -111,18 +112,6 @@ function scoreText(m: Match) {
 
 function playerNameById(players: RankingPlayer[], id: number) {
   return players.find((p) => p.id === id)?.name || `Jugador ${id}`;
-}
-
-function rankingPositionMap(rankingPlayers: RankingPlayer[]) {
-  const sorted = [...rankingPlayers].sort((a, b) => {
-    if (b.display_rating !== a.display_rating) return b.display_rating - a.display_rating;
-    if (b.elo_rating !== a.elo_rating) return b.elo_rating - a.elo_rating;
-    return a.name.localeCompare(b.name);
-  });
-
-  const map = new Map<string, number>();
-  sorted.forEach((p, idx) => map.set(p.name.trim().toLowerCase(), idx + 1));
-  return map;
 }
 
 function statsMap(rankingPlayers: RankingPlayer[]) {
@@ -345,9 +334,10 @@ export default function Page() {
     if (ok) setAdminUnlocked(true);
   }
 
-  function openResultModal(slotId: number) {
+  function openNewResultModal(slotId: number) {
     const slot = slotsWithPlayers.find((s) => s.id === slotId);
     if (!slot) return;
+
     if (slot.activePlayers.length !== 4) {
       alert('Para cargar resultado el turno debe tener exactamente 4 jugadores.');
       return;
@@ -360,6 +350,7 @@ export default function Page() {
 
     setResultForm({
       slotId,
+      editingMatchId: null,
       teamA1: p1,
       teamA2: p2,
       teamB1: p3,
@@ -372,6 +363,32 @@ export default function Page() {
       set3B: '',
       notes: '',
     });
+
+    setResultModalOpen(true);
+  }
+
+  function openEditResultModal(slotId: number) {
+    const slot = slotsWithPlayers.find((s) => s.id === slotId);
+    if (!slot || !slot.match) return;
+
+    const m = slot.match;
+
+    setResultForm({
+      slotId,
+      editingMatchId: m.id,
+      teamA1: m.team_a_player_1_id,
+      teamA2: m.team_a_player_2_id,
+      teamB1: m.team_b_player_1_id,
+      teamB2: m.team_b_player_2_id,
+      set1A: m.set1_a != null ? String(m.set1_a) : '',
+      set1B: m.set1_b != null ? String(m.set1_b) : '',
+      set2A: m.set2_a != null ? String(m.set2_a) : '',
+      set2B: m.set2_b != null ? String(m.set2_b) : '',
+      set3A: m.set3_a != null ? String(m.set3_a) : '',
+      set3B: m.set3_b != null ? String(m.set3_b) : '',
+      notes: m.notes || '',
+    });
+
     setResultModalOpen(true);
   }
 
@@ -403,6 +420,7 @@ export default function Page() {
 
     const ids = selectedIds as number[];
     const uniqueIds = new Set(ids);
+
     if (uniqueIds.size !== 4) {
       alert('No podés repetir jugadores en las parejas.');
       return;
@@ -410,6 +428,7 @@ export default function Page() {
 
     const validSlotPlayerIds = new Set(slot.activePlayers.map((p) => p.id));
     const allValid = ids.every((id) => validSlotPlayerIds.has(id));
+
     if (!allValid) {
       alert('Solo podés usar los 4 jugadores de ese turno.');
       return;
@@ -420,8 +439,6 @@ export default function Page() {
       alert('Cargá al menos un resultado válido para determinar ganador.');
       return;
     }
-
-    setSavingResult(true);
 
     const payload = {
       match_date: slot.date,
@@ -442,7 +459,17 @@ export default function Page() {
       notes: resultForm.notes.trim() || null,
     };
 
-    const { error } = await supabase.from('matches').insert(payload);
+    setSavingResult(true);
+
+    let error = null;
+
+    if (resultForm.editingMatchId) {
+      const res = await supabase.from('matches').update(payload).eq('id', resultForm.editingMatchId);
+      error = res.error;
+    } else {
+      const res = await supabase.from('matches').insert(payload);
+      error = res.error;
+    }
 
     setSavingResult(false);
 
@@ -810,7 +837,7 @@ export default function Page() {
 
                         {slot.activePlayers.length === 4 && !hasMatch && (
                           <button
-                            onClick={() => openResultModal(slot.id)}
+                            onClick={() => openNewResultModal(slot.id)}
                             style={{
                               padding: '10px 14px',
                               borderRadius: 12,
@@ -822,6 +849,23 @@ export default function Page() {
                             }}
                           >
                             Subir resultado
+                          </button>
+                        )}
+
+                        {slot.activePlayers.length === 4 && hasMatch && adminUnlocked && (
+                          <button
+                            onClick={() => openEditResultModal(slot.id)}
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: 12,
+                              border: 'none',
+                              background: '#7c3aed',
+                              color: 'white',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                            }}
+                          >
+                            Editar resultado
                           </button>
                         )}
                       </div>
@@ -921,13 +965,11 @@ export default function Page() {
                         >
                           <div style={{ fontWeight: 700, marginBottom: 6 }}>Resultado</div>
                           <div style={{ color: '#334155', marginBottom: 4 }}>
-                            A:{' '}
-                            {playerNameById(rankingPlayers, slot.match.team_a_player_1_id)} /{' '}
+                            A: {playerNameById(rankingPlayers, slot.match.team_a_player_1_id)} /{' '}
                             {playerNameById(rankingPlayers, slot.match.team_a_player_2_id)}
                           </div>
                           <div style={{ color: '#334155', marginBottom: 4 }}>
-                            B:{' '}
-                            {playerNameById(rankingPlayers, slot.match.team_b_player_1_id)} /{' '}
+                            B: {playerNameById(rankingPlayers, slot.match.team_b_player_1_id)} /{' '}
                             {playerNameById(rankingPlayers, slot.match.team_b_player_2_id)}
                           </div>
                           <div style={{ fontWeight: 700 }}>Score: {scoreText(slot.match)}</div>
@@ -1188,7 +1230,9 @@ export default function Page() {
               overflowY: 'auto',
             }}
           >
-            <h3 style={{ marginTop: 0, marginBottom: 12 }}>Subir resultado</h3>
+            <h3 style={{ marginTop: 0, marginBottom: 12 }}>
+              {resultForm.editingMatchId ? 'Editar resultado' : 'Subir resultado'}
+            </h3>
 
             {(() => {
               const slot = slotsWithPlayers.find((s) => s.id === resultForm.slotId);
@@ -1444,7 +1488,11 @@ export default function Page() {
                   fontWeight: 700,
                 }}
               >
-                {savingResult ? 'Guardando...' : 'Guardar resultado'}
+                {savingResult
+                  ? 'Guardando...'
+                  : resultForm.editingMatchId
+                  ? 'Guardar cambios'
+                  : 'Guardar resultado'}
               </button>
             </div>
           </div>
