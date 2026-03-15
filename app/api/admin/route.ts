@@ -7,12 +7,23 @@ const adminPin = process.env.ADMIN_PIN!;
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-async function recalculateRankings() {
+async function runRecalculateRankings() {
   const { error } = await supabase.rpc('recalculate_rankings');
-
   if (error) {
-    throw new Error(`Error recalculando rankings: ${error.message}`);
+    throw new Error(`No se pudo recalcular rankings: ${error.message}`);
   }
+
+  const { data: runs, error: runsError } = await supabase
+    .from('ranking_recalc_runs')
+    .select('id, created_at')
+    .order('id', { ascending: false })
+    .limit(1);
+
+  if (runsError) {
+    throw new Error(`Recalculó pero no pude leer ranking_recalc_runs: ${runsError.message}`);
+  }
+
+  return runs?.[0] || null;
 }
 
 export async function POST(req: Request) {
@@ -114,8 +125,13 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: error.message }, { status: 400 });
         }
 
-        await recalculateRankings();
-        return NextResponse.json({ ok: true, mode: 'updated' });
+        const recalcRun = await runRecalculateRankings();
+
+        return NextResponse.json({
+          ok: true,
+          mode: 'updated',
+          recalcRun,
+        });
       }
 
       const { error } = await supabase.from('matches').insert(payload);
@@ -124,8 +140,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
-      await recalculateRankings();
-      return NextResponse.json({ ok: true, mode: 'inserted' });
+      const recalcRun = await runRecalculateRankings();
+
+      return NextResponse.json({
+        ok: true,
+        mode: 'inserted',
+        recalcRun,
+      });
     }
 
     if (action === 'deleteMatch') {
@@ -141,8 +162,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
-      await recalculateRankings();
-      return NextResponse.json({ ok: true, mode: 'deleted' });
+      const recalcRun = await runRecalculateRankings();
+
+      return NextResponse.json({
+        ok: true,
+        mode: 'deleted',
+        recalcRun,
+      });
     }
 
     return NextResponse.json({ error: 'Acción inválida' }, { status: 400 });
