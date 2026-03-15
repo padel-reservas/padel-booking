@@ -168,6 +168,21 @@ function computeWinnerTeam(form: ResultFormState): 'A' | 'B' | null {
   return null;
 }
 
+function rankingPlayerIdFromSlotPlayerId(
+  slotPlayerId: number,
+  slotPlayers: SlotPlayer[],
+  rankingPlayers: RankingPlayer[]
+) {
+  const slotPlayer = slotPlayers.find((p) => p.id === slotPlayerId);
+  if (!slotPlayer) return null;
+
+  const rankingPlayer = rankingPlayers.find(
+    (p) => p.name.trim().toLowerCase() === slotPlayer.name.trim().toLowerCase()
+  );
+
+  return rankingPlayer?.id ?? null;
+}
+
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabKey>('turnos');
 
@@ -373,13 +388,22 @@ export default function Page() {
 
     const m = slot.match;
 
+    const slotPlayerIdByRankingId = (rankingId: number): number | '' => {
+      const rankingName = rankingPlayers.find((p) => p.id === rankingId)?.name?.trim().toLowerCase();
+      if (!rankingName) return '';
+      const slotPlayer = slot.activePlayers.find(
+        (p) => p.name.trim().toLowerCase() === rankingName
+      );
+      return slotPlayer?.id ?? '';
+    };
+
     setResultForm({
       slotId,
       editingMatchId: m.id,
-      teamA1: m.team_a_player_1_id,
-      teamA2: m.team_a_player_2_id,
-      teamB1: m.team_b_player_1_id,
-      teamB2: m.team_b_player_2_id,
+      teamA1: slotPlayerIdByRankingId(m.team_a_player_1_id),
+      teamA2: slotPlayerIdByRankingId(m.team_a_player_2_id),
+      teamB1: slotPlayerIdByRankingId(m.team_b_player_1_id),
+      teamB2: slotPlayerIdByRankingId(m.team_b_player_2_id),
       set1A: m.set1_a != null ? String(m.set1_a) : '',
       set1B: m.set1_b != null ? String(m.set1_b) : '',
       set2A: m.set2_a != null ? String(m.set2_a) : '',
@@ -418,8 +442,8 @@ export default function Page() {
       return;
     }
 
-    const ids = selectedIds as number[];
-    const uniqueIds = new Set(ids);
+    const slotPlayerIds = selectedIds as number[];
+    const uniqueIds = new Set(slotPlayerIds);
 
     if (uniqueIds.size !== 4) {
       alert('No podés repetir jugadores en las parejas.');
@@ -427,10 +451,38 @@ export default function Page() {
     }
 
     const validSlotPlayerIds = new Set(slot.activePlayers.map((p) => p.id));
-    const allValid = ids.every((id) => validSlotPlayerIds.has(id));
+    const allValid = slotPlayerIds.every((id) => validSlotPlayerIds.has(id));
 
     if (!allValid) {
       alert('Solo podés usar los 4 jugadores de ese turno.');
+      return;
+    }
+
+    const rankingIdA1 = rankingPlayerIdFromSlotPlayerId(
+      resultForm.teamA1 as number,
+      slotPlayers,
+      rankingPlayers
+    );
+    const rankingIdA2 = rankingPlayerIdFromSlotPlayerId(
+      resultForm.teamA2 as number,
+      slotPlayers,
+      rankingPlayers
+    );
+    const rankingIdB1 = rankingPlayerIdFromSlotPlayerId(
+      resultForm.teamB1 as number,
+      slotPlayers,
+      rankingPlayers
+    );
+    const rankingIdB2 = rankingPlayerIdFromSlotPlayerId(
+      resultForm.teamB2 as number,
+      slotPlayers,
+      rankingPlayers
+    );
+
+    if (!rankingIdA1 || !rankingIdA2 || !rankingIdB1 || !rankingIdB2) {
+      alert(
+        'Uno o más jugadores del turno no existen en ranking_players. Revisá que los nombres coincidan exactamente con los del ranking.'
+      );
       return;
     }
 
@@ -444,10 +496,10 @@ export default function Page() {
       match_date: slot.date,
       match_time: slot.time,
       slot_id: slot.id,
-      team_a_player_1_id: resultForm.teamA1 as number,
-      team_a_player_2_id: resultForm.teamA2 as number,
-      team_b_player_1_id: resultForm.teamB1 as number,
-      team_b_player_2_id: resultForm.teamB2 as number,
+      team_a_player_1_id: rankingIdA1,
+      team_a_player_2_id: rankingIdA2,
+      team_b_player_1_id: rankingIdB1,
+      team_b_player_2_id: rankingIdB2,
       set1_a: parseSetValue(resultForm.set1A),
       set1_b: parseSetValue(resultForm.set1B),
       set2_a: parseSetValue(resultForm.set2A),
