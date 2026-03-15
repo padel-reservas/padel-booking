@@ -7,6 +7,14 @@ const adminPin = process.env.ADMIN_PIN!;
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+async function runRecalculateRankings() {
+  const { error } = await supabase.rpc('recalculate_rankings');
+
+  if (error) {
+    throw new Error(`No se pudo recalcular rankings: ${error.message}`);
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -100,11 +108,16 @@ export async function POST(req: Request) {
       };
 
       if (matchId) {
-        const { error } = await supabase.from('matches').update(payload).eq('id', matchId);
+        const { error } = await supabase
+          .from('matches')
+          .update(payload)
+          .eq('id', matchId);
 
         if (error) {
           return NextResponse.json({ error: error.message }, { status: 400 });
         }
+
+        await runRecalculateRankings();
 
         return NextResponse.json({ ok: true, mode: 'updated' });
       }
@@ -114,6 +127,8 @@ export async function POST(req: Request) {
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
+
+      await runRecalculateRankings();
 
       return NextResponse.json({ ok: true, mode: 'inserted' });
     }
@@ -131,11 +146,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
+      await runRecalculateRankings();
+
       return NextResponse.json({ ok: true, mode: 'deleted' });
     }
 
     return NextResponse.json({ error: 'Acción inválida' }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || 'Error interno' },
+      { status: 500 }
+    );
   }
 }
