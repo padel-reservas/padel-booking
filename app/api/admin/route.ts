@@ -14,6 +14,7 @@ async function runRecalculateRankings() {
     throw new Error(`No se pudo recalcular rankings: ${error.message}`);
   }
 }
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
