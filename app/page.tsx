@@ -72,7 +72,6 @@ type PlayerTimelinePoint = {
 };
 
 type TabKey = 'turnos' | 'ranking' | 'historial';
-type ChartMode = 'position' | 'points';
 
 type ResultFormState = {
   slotId: number;
@@ -212,11 +211,10 @@ type ChartPoint = {
   changeDirection: 'up' | 'down' | 'flat';
 };
 
-function buildChartGeometry(
+function buildPointsChartGeometry(
   values: number[],
   labels: string[],
-  directions: Array<'up' | 'down' | 'flat'>,
-  mode: ChartMode
+  directions: Array<'up' | 'down' | 'flat'>
 ) {
   const width = 760;
   const height = 300;
@@ -247,10 +245,7 @@ function buildChartGeometry(
         ? paddingLeft + usableWidth / 2
         : paddingLeft + (i / (values.length - 1)) * usableWidth;
 
-    const y =
-      mode === 'position'
-        ? paddingTop + ((value - min) / range) * usableHeight
-        : paddingTop + ((max - value) / range) * usableHeight;
+    const y = paddingTop + ((max - value) / range) * usableHeight;
 
     return {
       x,
@@ -279,7 +274,6 @@ export default function Page() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [timeline, setTimeline] = useState<PlayerTimelinePoint[]>([]);
 
-  const [chartMode, setChartMode] = useState<ChartMode>('position');
   const [selectedChartPlayer, setSelectedChartPlayer] = useState<string>('');
 
   const [nameInput, setNameInput] = useState<Record<number, string>>({});
@@ -315,11 +309,10 @@ export default function Page() {
       supabase.from('slots').select('*').order('date').order('time'),
       supabase.from('players').select('*').order('created_at', { ascending: true }),
       supabase
-        .from('ranking_players')
+        .from('player_ranking_timeline')
         .select('*')
-        .order('display_rating', { ascending: false })
-        .order('elo_rating', { ascending: false })
-        .order('name', { ascending: true }),
+        .order('match_date', { ascending: true })
+        .order('match_id', { ascending: true }),
       supabase
         .from('matches')
         .select('*')
@@ -332,7 +325,15 @@ export default function Page() {
         .order('match_id', { ascending: true }),
     ]);
 
-    const rankingData = (rankingPlayersData || []) as RankingPlayer[];
+    // importante: ranking_players sigue viniendo de la tabla real actual
+    const { data: rankingPlayersFresh } = await supabase
+      .from('ranking_players')
+      .select('*')
+      .order('display_rating', { ascending: false })
+      .order('elo_rating', { ascending: false })
+      .order('name', { ascending: true });
+
+    const rankingData = (rankingPlayersFresh || []) as RankingPlayer[];
 
     setSlots((slotsData || []) as Slot[]);
     setSlotPlayers((slotPlayersData || []) as SlotPlayer[]);
@@ -409,23 +410,12 @@ export default function Page() {
 
     return selectedPlayerTimeline.map((row, index) => {
       const prev = selectedPlayerTimeline[index - 1];
-      const currentValue =
-        chartMode === 'position' ? Number(row.rank_position) : Number(row.post_rating);
-      const previousValue = prev
-        ? chartMode === 'position'
-          ? Number(prev.rank_position)
-          : Number(prev.post_rating)
-        : currentValue;
+      const currentValue = Number(row.post_rating);
+      const previousValue = prev ? Number(prev.post_rating) : currentValue;
 
       let changeDirection: 'up' | 'down' | 'flat' = 'flat';
-
-      if (chartMode === 'position') {
-        if (currentValue < previousValue) changeDirection = 'up';
-        else if (currentValue > previousValue) changeDirection = 'down';
-      } else {
-        if (currentValue > previousValue) changeDirection = 'up';
-        else if (currentValue < previousValue) changeDirection = 'down';
-      }
+      if (currentValue > previousValue) changeDirection = 'up';
+      else if (currentValue < previousValue) changeDirection = 'down';
 
       return {
         ...row,
@@ -434,7 +424,7 @@ export default function Page() {
         changeDirection,
       };
     });
-  }, [selectedPlayerTimeline, chartMode]);
+  }, [selectedPlayerTimeline]);
 
   const chartStats = useMemo(() => {
     if (chartSeries.length === 0) return null;
@@ -458,8 +448,8 @@ export default function Page() {
     const values = chartSeries.map((r) => r.currentValue);
     const labels = chartSeries.map((r) => r.label);
     const directions = chartSeries.map((r) => r.changeDirection);
-    return buildChartGeometry(values, labels, directions, chartMode);
-  }, [chartSeries, chartMode]);
+    return buildPointsChartGeometry(values, labels, directions);
+  }, [chartSeries]);
 
   const slotMatchMap = useMemo(() => {
     const map = new Map<number, Match>();
@@ -776,27 +766,6 @@ export default function Page() {
           color: active ? 'white' : '#111827',
           cursor: 'pointer',
           fontWeight: 700,
-        }}
-      >
-        {label}
-      </button>
-    );
-  }
-
-  function modeButton(label: string, mode: ChartMode) {
-    const active = chartMode === mode;
-    return (
-      <button
-        onClick={() => setChartMode(mode)}
-        style={{
-          padding: '8px 12px',
-          borderRadius: 10,
-          border: active ? 'none' : '1px solid #d1d5db',
-          background: active ? '#111827' : 'white',
-          color: active ? 'white' : '#111827',
-          cursor: 'pointer',
-          fontWeight: 700,
-          fontSize: 13,
         }}
       >
         {label}
@@ -1568,37 +1537,32 @@ export default function Page() {
             >
               <div>
                 <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a' }}>
-                  Evolución
+                  Evolución de puntos
                 </div>
                 <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
                   Jugador: {chartPlayerName || '—'}
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                {modeButton('Posición', 'position')}
-                {modeButton('Puntos', 'points')}
-
-                <select
-                  value={chartPlayerName}
-                  onChange={(e) => setSelectedChartPlayer(e.target.value)}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: 12,
-                    border: '1px solid #d1d5db',
-                    background: 'white',
-                    minWidth: 220,
-                  }}
-                >
-                  {[...rankingPlayers]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((p) => (
-                      <option key={p.id} value={p.name}>
-                        {p.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
+              <select
+                value={chartPlayerName}
+                onChange={(e) => setSelectedChartPlayer(e.target.value)}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  border: '1px solid #d1d5db',
+                  background: 'white',
+                  minWidth: 220,
+                }}
+              >
+                {[...rankingPlayers]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+              </select>
             </div>
 
             {chartStats && (
@@ -1621,10 +1585,7 @@ export default function Page() {
                     color: '#334155',
                   }}
                 >
-                  Inicio:{' '}
-                  {chartMode === 'position'
-                    ? `#${Math.round(chartStats.first)}`
-                    : Math.round(chartStats.first)}
+                  Inicio: {Math.round(chartStats.first)}
                 </div>
                 <div
                   style={{
@@ -1637,47 +1598,21 @@ export default function Page() {
                     color: '#1d4ed8',
                   }}
                 >
-                  Actual:{' '}
-                  {chartMode === 'position'
-                    ? `#${Math.round(chartStats.last)}`
-                    : Math.round(chartStats.last)}
+                  Actual: {Math.round(chartStats.last)}
                 </div>
                 <div
                   style={{
                     padding: '6px 10px',
                     borderRadius: 999,
-                    background:
-                      chartMode === 'position'
-                        ? chartStats.change <= 0
-                          ? '#ecfdf5'
-                          : '#fef2f2'
-                        : chartStats.change >= 0
-                        ? '#ecfdf5'
-                        : '#fef2f2',
-                    border: `1px solid ${
-                      chartMode === 'position'
-                        ? chartStats.change <= 0
-                          ? '#bbf7d0'
-                          : '#fecaca'
-                        : chartStats.change >= 0
-                        ? '#bbf7d0'
-                        : '#fecaca'
-                    }`,
+                    background: chartStats.change >= 0 ? '#ecfdf5' : '#fef2f2',
+                    border: `1px solid ${chartStats.change >= 0 ? '#bbf7d0' : '#fecaca'}`,
                     fontSize: 13,
                     fontWeight: 700,
-                    color:
-                      chartMode === 'position'
-                        ? chartStats.change <= 0
-                          ? '#166534'
-                          : '#b91c1c'
-                        : chartStats.change >= 0
-                        ? '#166534'
-                        : '#b91c1c',
+                    color: chartStats.change >= 0 ? '#166534' : '#b91c1c',
                   }}
                 >
-                  {chartMode === 'position'
-                    ? `${chartStats.change <= 0 ? '' : '+'}${chartStats.change.toFixed(0)} puestos`
-                    : `${chartStats.change >= 0 ? '+' : ''}${chartStats.change.toFixed(2)} pts`}
+                  {chartStats.change >= 0 ? '+' : ''}
+                  {chartStats.change.toFixed(2)} pts
                 </div>
               </div>
             )}
@@ -1752,9 +1687,7 @@ export default function Page() {
                       fontWeight="700"
                       fill="#1d4ed8"
                     >
-                      {chartMode === 'position'
-                        ? `#${Math.round(chartGeometry.points[chartGeometry.points.length - 1].value)}`
-                        : Math.round(chartGeometry.points[chartGeometry.points.length - 1].value)}
+                      {Math.round(chartGeometry.points[chartGeometry.points.length - 1].value)}
                     </text>
                   )}
                 </svg>
