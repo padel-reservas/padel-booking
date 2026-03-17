@@ -72,7 +72,7 @@ type PlayerRatingHistoryPoint = {
   delta: number;
 };
 
-type TabKey = 'turnos' | 'ranking' | 'historial';
+type TabKey = 'turnos' | 'ranking' | 'duelo' | 'historial';
 
 type ResultFormState = {
   slotId: number;
@@ -278,8 +278,8 @@ export default function Page() {
   const [ratingHistory, setRatingHistory] = useState<PlayerRatingHistoryPoint[]>([]);
 
   const [selectedChartPlayer, setSelectedChartPlayer] = useState<string>('');
-  const [h2hPlayerA, setH2hPlayerA] = useState<string>('');
-  const [h2hPlayerB, setH2hPlayerB] = useState<string>('');
+  const [duelPlayerA, setDuelPlayerA] = useState<string>('');
+  const [duelPlayerB, setDuelPlayerB] = useState<string>('');
 
   const [nameInput, setNameInput] = useState<Record<number, string>>({});
   const [showAdmin, setShowAdmin] = useState(false);
@@ -345,8 +345,8 @@ export default function Page() {
       return rankingData[0]?.name || '';
     });
 
-    setH2hPlayerA((prev) => prev || myPlayerName || rankingData[0]?.name || '');
-    setH2hPlayerB((prev) => {
+    setDuelPlayerA((prev) => prev || myPlayerName || rankingData[0]?.name || '');
+    setDuelPlayerB((prev) => {
       if (prev) return prev;
       const fallbackA = myPlayerName || rankingData[0]?.name || '';
       const another = rankingData.find((p) => p.name !== fallbackA)?.name || '';
@@ -365,14 +365,14 @@ export default function Page() {
     if (saved) {
       setMyPlayerName(saved);
       setSelectedChartPlayer(saved);
-      setH2hPlayerA(saved);
+      setDuelPlayerA(saved);
     }
   }, []);
 
   function handleSelectMyPlayer(name: string) {
     setMyPlayerName(name);
     setSelectedChartPlayer(name);
-    setH2hPlayerA(name);
+    setDuelPlayerA(name);
     window.localStorage.setItem('myPlayerName', name);
   }
 
@@ -454,7 +454,7 @@ export default function Page() {
   }, [selectedPlayerHistory]);
 
   const h2hData = useMemo(() => {
-    if (!h2hPlayerA || !h2hPlayerB || h2hPlayerA === h2hPlayerB) {
+    if (!duelPlayerA || !duelPlayerB || duelPlayerA === duelPlayerB) {
       return {
         matches: [] as H2HMatch[],
         winsA: 0,
@@ -466,10 +466,10 @@ export default function Page() {
     }
 
     const playerA = rankingPlayers.find(
-      (p) => p.name.trim().toLowerCase() === h2hPlayerA.trim().toLowerCase()
+      (p) => p.name.trim().toLowerCase() === duelPlayerA.trim().toLowerCase()
     );
     const playerB = rankingPlayers.find(
-      (p) => p.name.trim().toLowerCase() === h2hPlayerB.trim().toLowerCase()
+      (p) => p.name.trim().toLowerCase() === duelPlayerB.trim().toLowerCase()
     );
 
     if (!playerA || !playerB) {
@@ -523,8 +523,8 @@ export default function Page() {
       }
       currentStreakText =
         latestWinner === 'A'
-          ? `${h2hPlayerA} lleva ${streakCount}`
-          : `${h2hPlayerB} lleva ${streakCount}`;
+          ? `${duelPlayerA} lleva ${streakCount}`
+          : `${duelPlayerB} lleva ${streakCount}`;
     }
 
     return {
@@ -535,10 +535,10 @@ export default function Page() {
       winPctA,
       currentStreakText,
     };
-  }, [matches, rankingPlayers, h2hPlayerA, h2hPlayerB]);
+  }, [matches, rankingPlayers, duelPlayerA, duelPlayerB]);
 
   const partnershipData = useMemo(() => {
-    if (!h2hPlayerA || !h2hPlayerB || h2hPlayerA === h2hPlayerB) {
+    if (!duelPlayerA || !duelPlayerB || duelPlayerA === duelPlayerB) {
       return {
         matches: [] as PartnershipMatch[],
         wins: 0,
@@ -550,10 +550,10 @@ export default function Page() {
     }
 
     const playerA = rankingPlayers.find(
-      (p) => p.name.trim().toLowerCase() === h2hPlayerA.trim().toLowerCase()
+      (p) => p.name.trim().toLowerCase() === duelPlayerA.trim().toLowerCase()
     );
     const playerB = rankingPlayers.find(
-      (p) => p.name.trim().toLowerCase() === h2hPlayerB.trim().toLowerCase()
+      (p) => p.name.trim().toLowerCase() === duelPlayerB.trim().toLowerCase()
     );
 
     if (!playerA || !playerB) {
@@ -621,7 +621,7 @@ export default function Page() {
       winPct,
       currentStreakText,
     };
-  }, [matches, rankingPlayers, h2hPlayerA, h2hPlayerB]);
+  }, [matches, rankingPlayers, duelPlayerA, duelPlayerB]);
 
   const slotMatchMap = useMemo(() => {
     const map = new Map<number, Match>();
@@ -993,6 +993,7 @@ export default function Page() {
 
           {tabButton('Turnos', 'turnos')}
           {tabButton('Ranking', 'ranking')}
+          {tabButton('Duelo', 'duelo')}
           {tabButton('Historial', 'historial')}
 
           {canSeeAdmin && activeTab === 'turnos' && (
@@ -1866,394 +1867,6 @@ export default function Page() {
             )}
           </div>
 
-          <div
-            style={{
-              marginBottom: 18,
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
-              borderRadius: 20,
-              padding: 18,
-            }}
-          >
-            <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a', marginBottom: 14 }}>
-              Head-to-head / Como pareja
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                gap: 10,
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                marginBottom: 14,
-              }}
-            >
-              <select
-                value={h2hPlayerA}
-                onChange={(e) => setH2hPlayerA(e.target.value)}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 12,
-                  border: '1px solid #d1d5db',
-                  background: 'white',
-                  minWidth: 220,
-                }}
-              >
-                <option value="">Jugador A</option>
-                {[...rankingPlayers]
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
-
-              <div style={{ fontWeight: 800, color: '#64748b' }}>y</div>
-
-              <select
-                value={h2hPlayerB}
-                onChange={(e) => setH2hPlayerB(e.target.value)}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 12,
-                  border: '1px solid #d1d5db',
-                  background: 'white',
-                  minWidth: 220,
-                }}
-              >
-                <option value="">Jugador B</option>
-                {[...rankingPlayers]
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            {h2hPlayerA && h2hPlayerB && h2hPlayerA === h2hPlayerB ? (
-              <div
-                style={{
-                  padding: 14,
-                  borderRadius: 14,
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  color: '#64748b',
-                }}
-              >
-                Elegí dos jugadores distintos.
-              </div>
-            ) : (
-              <>
-                <div
-                  style={{
-                    display: 'grid',
-                    gap: 18,
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-                  }}
-                >
-                  <div
-                    style={{
-                      border: '1px solid #e5e7eb',
-                      borderRadius: 18,
-                      padding: 16,
-                      background: '#fcfcfd',
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>
-                      Head-to-head
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 10,
-                        flexWrap: 'wrap',
-                        marginBottom: 14,
-                      }}
-                    >
-                      <div
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 14,
-                          background: '#eff6ff',
-                          border: '1px solid #bfdbfe',
-                          color: '#1d4ed8',
-                          fontWeight: 800,
-                        }}
-                      >
-                        {h2hPlayerA || 'Jugador A'} {h2hData.winsA} - {h2hData.winsB} {h2hPlayerB || 'Jugador B'}
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 14,
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          color: '#334155',
-                          fontWeight: 700,
-                        }}
-                      >
-                        Partidos: {h2hData.total}
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 14,
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          color: '#334155',
-                          fontWeight: 700,
-                        }}
-                      >
-                        Win % {h2hPlayerA || 'A'}: {h2hData.winPctA.toFixed(1)}%
-                      </div>
-
-                      {h2hData.currentStreakText && (
-                        <div
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 14,
-                            background: '#fff7ed',
-                            border: '1px solid #fdba74',
-                            color: '#c2410c',
-                            fontWeight: 800,
-                          }}
-                        >
-                          {h2hData.currentStreakText}
-                        </div>
-                      )}
-                    </div>
-
-                    {h2hData.matches.length === 0 ? (
-                      <div
-                        style={{
-                          padding: 14,
-                          borderRadius: 14,
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          color: '#64748b',
-                        }}
-                      >
-                        No hay cruces cargados entre esos dos jugadores.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'grid', gap: 10 }}>
-                        {h2hData.matches.map((m) => {
-                          const teamA = `${playerNameById(rankingPlayers, m.team_a_player_1_id)} / ${playerNameById(
-                            rankingPlayers,
-                            m.team_a_player_2_id
-                          )}`;
-                          const teamB = `${playerNameById(rankingPlayers, m.team_b_player_1_id)} / ${playerNameById(
-                            rankingPlayers,
-                            m.team_b_player_2_id
-                          )}`;
-
-                          return (
-                            <div
-                              key={`h2h-${m.id}`}
-                              style={{
-                                border: '1px solid #e5e7eb',
-                                borderRadius: 14,
-                                padding: 14,
-                                background: 'white',
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  gap: 8,
-                                  flexWrap: 'wrap',
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <div style={{ fontWeight: 800 }}>
-                                  {formatDate(m.match_date)}
-                                  {m.match_time ? ` · ${m.match_time}` : ''}
-                                </div>
-
-                                <div
-                                  style={{
-                                    padding: '6px 10px',
-                                    borderRadius: 999,
-                                    background: m.winnerLabel === 'A' ? '#ecfdf5' : '#fef2f2',
-                                    border: `1px solid ${m.winnerLabel === 'A' ? '#bbf7d0' : '#fecaca'}`,
-                                    color: m.winnerLabel === 'A' ? '#166534' : '#b91c1c',
-                                    fontWeight: 800,
-                                    fontSize: 12,
-                                  }}
-                                >
-                                  Ganó {m.winnerLabel === 'A' ? h2hPlayerA : h2hPlayerB}
-                                </div>
-                              </div>
-
-                              <div style={{ color: '#334155', marginBottom: 4 }}>Team A: {teamA}</div>
-                              <div style={{ color: '#334155', marginBottom: 6 }}>Team B: {teamB}</div>
-                              <div style={{ fontWeight: 800 }}>Score: {scoreText(m)}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  <div
-                    style={{
-                      border: '1px solid #e5e7eb',
-                      borderRadius: 18,
-                      padding: 16,
-                      background: '#fcfcfd',
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>
-                      Como pareja
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 10,
-                        flexWrap: 'wrap',
-                        marginBottom: 14,
-                      }}
-                    >
-                      <div
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 14,
-                          background: '#eefbf3',
-                          border: '1px solid #bbf7d0',
-                          color: '#166534',
-                          fontWeight: 800,
-                        }}
-                      >
-                        {h2hPlayerA || 'Jugador A'} + {h2hPlayerB || 'Jugador B'}: {partnershipData.wins} - {partnershipData.losses}
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 14,
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          color: '#334155',
-                          fontWeight: 700,
-                        }}
-                      >
-                        Juntos: {partnershipData.total}
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 14,
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          color: '#334155',
-                          fontWeight: 700,
-                        }}
-                      >
-                        Win % juntos: {partnershipData.winPct.toFixed(1)}%
-                      </div>
-
-                      {partnershipData.currentStreakText && (
-                        <div
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 14,
-                            background: '#fff7ed',
-                            border: '1px solid #fdba74',
-                            color: '#c2410c',
-                            fontWeight: 800,
-                          }}
-                        >
-                          {partnershipData.currentStreakText}
-                        </div>
-                      )}
-                    </div>
-
-                    {partnershipData.matches.length === 0 ? (
-                      <div
-                        style={{
-                          padding: 14,
-                          borderRadius: 14,
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          color: '#64748b',
-                        }}
-                      >
-                        No hay partidos cargados donde hayan jugado juntos.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'grid', gap: 10 }}>
-                        {partnershipData.matches.map((m) => {
-                          const teamA = `${playerNameById(rankingPlayers, m.team_a_player_1_id)} / ${playerNameById(
-                            rankingPlayers,
-                            m.team_a_player_2_id
-                          )}`;
-                          const teamB = `${playerNameById(rankingPlayers, m.team_b_player_1_id)} / ${playerNameById(
-                            rankingPlayers,
-                            m.team_b_player_2_id
-                          )}`;
-
-                          return (
-                            <div
-                              key={`pair-${m.id}`}
-                              style={{
-                                border: '1px solid #e5e7eb',
-                                borderRadius: 14,
-                                padding: 14,
-                                background: 'white',
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  gap: 8,
-                                  flexWrap: 'wrap',
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <div style={{ fontWeight: 800 }}>
-                                  {formatDate(m.match_date)}
-                                  {m.match_time ? ` · ${m.match_time}` : ''}
-                                </div>
-
-                                <div
-                                  style={{
-                                    padding: '6px 10px',
-                                    borderRadius: 999,
-                                    background: m.resultLabel === 'W' ? '#ecfdf5' : '#fef2f2',
-                                    border: `1px solid ${m.resultLabel === 'W' ? '#bbf7d0' : '#fecaca'}`,
-                                    color: m.resultLabel === 'W' ? '#166534' : '#b91c1c',
-                                    fontWeight: 800,
-                                    fontSize: 12,
-                                  }}
-                                >
-                                  {m.resultLabel === 'W' ? 'Ganaron juntos' : 'Perdieron juntos'}
-                                </div>
-                              </div>
-
-                              <div style={{ color: '#334155', marginBottom: 4 }}>Team A: {teamA}</div>
-                              <div style={{ color: '#334155', marginBottom: 6 }}>Team B: {teamB}</div>
-                              <div style={{ fontWeight: 800 }}>Score: {scoreText(m)}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
             <thead>
               <tr>
@@ -2439,6 +2052,397 @@ export default function Page() {
                 })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && activeTab === 'duelo' && (
+        <div
+          style={{
+            background: 'white',
+            borderRadius: 24,
+            padding: 24,
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)',
+          }}
+        >
+          <div style={{ marginBottom: 18 }}>
+            <h2 style={{ margin: 0, fontSize: 24 }}>Duelo</h2>
+            <div style={{ marginTop: 6, color: '#64748b', fontSize: 14 }}>
+              Compará dos jugadores como rivales y como pareja.
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              marginBottom: 18,
+            }}
+          >
+            <select
+              value={duelPlayerA}
+              onChange={(e) => setDuelPlayerA(e.target.value)}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 12,
+                border: '1px solid #d1d5db',
+                background: 'white',
+                minWidth: 220,
+              }}
+            >
+              <option value="">Jugador A</option>
+              {[...rankingPlayers]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+
+            <div style={{ fontWeight: 800, color: '#64748b' }}>y</div>
+
+            <select
+              value={duelPlayerB}
+              onChange={(e) => setDuelPlayerB(e.target.value)}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 12,
+                border: '1px solid #d1d5db',
+                background: 'white',
+                minWidth: 220,
+              }}
+            >
+              <option value="">Jugador B</option>
+              {[...rankingPlayers]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {duelPlayerA && duelPlayerB && duelPlayerA === duelPlayerB ? (
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 14,
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                color: '#64748b',
+              }}
+            >
+              Elegí dos jugadores distintos.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gap: 18,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              }}
+            >
+              <div
+                style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 18,
+                  padding: 16,
+                  background: '#fcfcfd',
+                }}
+              >
+                <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>
+                  Head-to-head
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    marginBottom: 14,
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      background: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      color: '#1d4ed8',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {duelPlayerA || 'Jugador A'} {h2hData.winsA} - {h2hData.winsB} {duelPlayerB || 'Jugador B'}
+                  </div>
+
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#334155',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Partidos: {h2hData.total}
+                  </div>
+
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#334155',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Win % {duelPlayerA || 'A'}: {h2hData.winPctA.toFixed(1)}%
+                  </div>
+
+                  {h2hData.currentStreakText && (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 14,
+                        background: '#fff7ed',
+                        border: '1px solid #fdba74',
+                        color: '#c2410c',
+                        fontWeight: 800,
+                      }}
+                    >
+                      {h2hData.currentStreakText}
+                    </div>
+                  )}
+                </div>
+
+                {h2hData.matches.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 14,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#64748b',
+                    }}
+                  >
+                    No hay cruces cargados entre esos dos jugadores.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {h2hData.matches.map((m) => {
+                      const teamA = `${playerNameById(rankingPlayers, m.team_a_player_1_id)} / ${playerNameById(
+                        rankingPlayers,
+                        m.team_a_player_2_id
+                      )}`;
+                      const teamB = `${playerNameById(rankingPlayers, m.team_b_player_1_id)} / ${playerNameById(
+                        rankingPlayers,
+                        m.team_b_player_2_id
+                      )}`;
+
+                      return (
+                        <div
+                          key={`h2h-${m.id}`}
+                          style={{
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 14,
+                            padding: 14,
+                            background: 'white',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 8,
+                              flexWrap: 'wrap',
+                              marginBottom: 8,
+                            }}
+                          >
+                            <div style={{ fontWeight: 800 }}>
+                              {formatDate(m.match_date)}
+                              {m.match_time ? ` · ${m.match_time}` : ''}
+                            </div>
+
+                            <div
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 999,
+                                background: m.winnerLabel === 'A' ? '#ecfdf5' : '#fef2f2',
+                                border: `1px solid ${m.winnerLabel === 'A' ? '#bbf7d0' : '#fecaca'}`,
+                                color: m.winnerLabel === 'A' ? '#166534' : '#b91c1c',
+                                fontWeight: 800,
+                                fontSize: 12,
+                              }}
+                            >
+                              Ganó {m.winnerLabel === 'A' ? duelPlayerA : duelPlayerB}
+                            </div>
+                          </div>
+
+                          <div style={{ color: '#334155', marginBottom: 4 }}>Team A: {teamA}</div>
+                          <div style={{ color: '#334155', marginBottom: 6 }}>Team B: {teamB}</div>
+                          <div style={{ fontWeight: 800 }}>Score: {scoreText(m)}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 18,
+                  padding: 16,
+                  background: '#fcfcfd',
+                }}
+              >
+                <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>
+                  Como pareja
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    marginBottom: 14,
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      background: '#eefbf3',
+                      border: '1px solid #bbf7d0',
+                      color: '#166534',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {duelPlayerA || 'Jugador A'} + {duelPlayerB || 'Jugador B'}: {partnershipData.wins} - {partnershipData.losses}
+                  </div>
+
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#334155',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Juntos: {partnershipData.total}
+                  </div>
+
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#334155',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Win % juntos: {partnershipData.winPct.toFixed(1)}%
+                  </div>
+
+                  {partnershipData.currentStreakText && (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 14,
+                        background: '#fff7ed',
+                        border: '1px solid #fdba74',
+                        color: '#c2410c',
+                        fontWeight: 800,
+                      }}
+                    >
+                      {partnershipData.currentStreakText}
+                    </div>
+                  )}
+                </div>
+
+                {partnershipData.matches.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 14,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#64748b',
+                    }}
+                  >
+                    No hay partidos cargados donde hayan jugado juntos.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {partnershipData.matches.map((m) => {
+                      const teamA = `${playerNameById(rankingPlayers, m.team_a_player_1_id)} / ${playerNameById(
+                        rankingPlayers,
+                        m.team_a_player_2_id
+                      )}`;
+                      const teamB = `${playerNameById(rankingPlayers, m.team_b_player_1_id)} / ${playerNameById(
+                        rankingPlayers,
+                        m.team_b_player_2_id
+                      )}`;
+
+                      return (
+                        <div
+                          key={`pair-${m.id}`}
+                          style={{
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 14,
+                            padding: 14,
+                            background: 'white',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 8,
+                              flexWrap: 'wrap',
+                              marginBottom: 8,
+                            }}
+                          >
+                            <div style={{ fontWeight: 800 }}>
+                              {formatDate(m.match_date)}
+                              {m.match_time ? ` · ${m.match_time}` : ''}
+                            </div>
+
+                            <div
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 999,
+                                background: m.resultLabel === 'W' ? '#ecfdf5' : '#fef2f2',
+                                border: `1px solid ${m.resultLabel === 'W' ? '#bbf7d0' : '#fecaca'}`,
+                                color: m.resultLabel === 'W' ? '#166534' : '#b91c1c',
+                                fontWeight: 800,
+                                fontSize: 12,
+                              }}
+                            >
+                              {m.resultLabel === 'W' ? 'Ganaron juntos' : 'Perdieron juntos'}
+                            </div>
+                          </div>
+
+                          <div style={{ color: '#334155', marginBottom: 4 }}>Team A: {teamA}</div>
+                          <div style={{ color: '#334155', marginBottom: 6 }}>Team B: {teamB}</div>
+                          <div style={{ fontWeight: 800 }}>Score: {scoreText(m)}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
