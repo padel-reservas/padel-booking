@@ -61,18 +61,18 @@ type Match = {
   created_at?: string;
 };
 
-type PlayerRatingHistoryPoint = {
+type PlayerTimelinePoint = {
   player_id: number;
   player_name: string;
   match_id: number;
   match_date: string;
   match_time: string | null;
-  pre_rating: number;
   post_rating: number;
-  delta: number;
+  rank_position: number;
 };
 
 type TabKey = 'turnos' | 'ranking' | 'historial';
+type ChartMode = 'position' | 'points';
 
 type ResultFormState = {
   slotId: number;
@@ -102,6 +102,14 @@ function formatDate(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00`);
   return d.toLocaleDateString('es-AR', {
     weekday: 'short',
+    day: 'numeric',
+    month: 'numeric',
+  });
+}
+
+function shortDate(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  return d.toLocaleDateString('es-AR', {
     day: 'numeric',
     month: 'numeric',
   });
@@ -196,28 +204,70 @@ function rankingPlayerIdFromSlotPlayerId(
   return rankingPlayer?.id ?? null;
 }
 
-function buildLinePath(values: number[], width: number, height: number, padding = 24) {
-  if (values.length === 0) return '';
+type ChartPoint = {
+  x: number;
+  y: number;
+  value: number;
+  label: string;
+  changeDirection: 'up' | 'down' | 'flat';
+};
+
+function buildChartGeometry(
+  values: number[],
+  labels: string[],
+  directions: Array<'up' | 'down' | 'flat'>,
+  mode: ChartMode
+) {
+  const width = 760;
+  const height = 300;
+  const paddingLeft = 40;
+  const paddingRight = 20;
+  const paddingTop = 24;
+  const paddingBottom = 50;
+
+  if (values.length === 0) {
+    return {
+      width,
+      height,
+      points: [] as ChartPoint[],
+      path: '',
+      gridYs: [] as number[],
+    };
+  }
 
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
+  const usableWidth = width - paddingLeft - paddingRight;
+  const usableHeight = height - paddingTop - paddingBottom;
 
-  const usableWidth = width - padding * 2;
-  const usableHeight = height - padding * 2;
-
-  const points = values.map((v, i) => {
+  const points = values.map((value, i) => {
     const x =
       values.length === 1
-        ? width / 2
-        : padding + (i / (values.length - 1)) * usableWidth;
-    const y = padding + ((max - v) / range) * usableHeight;
-    return { x, y };
+        ? paddingLeft + usableWidth / 2
+        : paddingLeft + (i / (values.length - 1)) * usableWidth;
+
+    const y =
+      mode === 'position'
+        ? paddingTop + ((value - min) / range) * usableHeight
+        : paddingTop + ((max - value) / range) * usableHeight;
+
+    return {
+      x,
+      y,
+      value,
+      label: labels[i],
+      changeDirection: directions[i],
+    };
   });
 
-  return points
+  const path = points
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`)
     .join(' ');
+
+  const gridYs = [0, 1, 2, 3].map((i) => paddingTop + (i / 3) * usableHeight);
+
+  return { width, height, points, path, gridYs };
 }
 
 export default function Page() {
@@ -227,8 +277,9 @@ export default function Page() {
   const [slotPlayers, setSlotPlayers] = useState<SlotPlayer[]>([]);
   const [rankingPlayers, setRankingPlayers] = useState<RankingPlayer[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [timeline, setTimeline] = useState<PlayerTimelinePoint[]>([]);
 
-  const [ratingHistory, setRatingHistory] = useState<PlayerRatingHistoryPoint[]>([]);
+  const [chartMode, setChartMode] = useState<ChartMode>('position');
   const [selectedChartPlayer, setSelectedChartPlayer] = useState<string>('');
 
   const [nameInput, setNameInput] = useState<Record<number, string>>({});
@@ -259,7 +310,7 @@ export default function Page() {
       { data: slotPlayersData },
       { data: rankingPlayersData },
       { data: matchesData },
-      { data: ratingHistoryData },
+      { data: timelineData },
     ] = await Promise.all([
       supabase.from('slots').select('*').order('date').order('time'),
       supabase.from('players').select('*').order('created_at', { ascending: true }),
@@ -275,7 +326,7 @@ export default function Page() {
         .order('match_date', { ascending: false })
         .order('id', { ascending: false }),
       supabase
-        .from('player_rating_history')
+        .from('player_ranking_timeline')
         .select('*')
         .order('match_date', { ascending: true })
         .order('match_id', { ascending: true }),
@@ -287,7 +338,7 @@ export default function Page() {
     setSlotPlayers((slotPlayersData || []) as SlotPlayer[]);
     setRankingPlayers(rankingData);
     setMatches((matchesData || []) as Match[]);
-    setRatingHistory((ratingHistoryData || []) as PlayerRatingHistoryPoint[]);
+    setTimeline((timelineData || []) as PlayerTimelinePoint[]);
 
     setSelectedChartPlayer((prev) => {
       if (prev) return prev;
@@ -347,37 +398,68 @@ export default function Page() {
 
   const chartPlayerName = selectedChartPlayer || myPlayerName || rankingPlayers[0]?.name || '';
 
-  const selectedPlayerHistory = useMemo(() => {
-    const rows = ratingHistory.filter(
+  const selectedPlayerTimeline = useMemo(() => {
+    return timeline.filter(
       (r) => r.player_name.trim().toLowerCase() === chartPlayerName.trim().toLowerCase()
     );
+  }, [timeline, chartPlayerName]);
 
-    return rows.map((r, idx) => ({
-      ...r,
-      index: idx + 1,
-      label: `${formatDate(r.match_date)}`,
-    }));
-  }, [ratingHistory, chartPlayerName]);
+  const chartSeries = useMemo(() => {
+    if (selectedPlayerTimeline.length === 0) return [];
 
-  const chartValues = selectedPlayerHistory.map((r) => Number(r.post_rating));
-  const chartPath = buildLinePath(chartValues, 760, 260, 24);
+    return selectedPlayerTimeline.map((row, index) => {
+      const prev = selectedPlayerTimeline[index - 1];
+      const currentValue =
+        chartMode === 'position' ? Number(row.rank_position) : Number(row.post_rating);
+      const previousValue = prev
+        ? chartMode === 'position'
+          ? Number(prev.rank_position)
+          : Number(prev.post_rating)
+        : currentValue;
+
+      let changeDirection: 'up' | 'down' | 'flat' = 'flat';
+
+      if (chartMode === 'position') {
+        if (currentValue < previousValue) changeDirection = 'up';
+        else if (currentValue > previousValue) changeDirection = 'down';
+      } else {
+        if (currentValue > previousValue) changeDirection = 'up';
+        else if (currentValue < previousValue) changeDirection = 'down';
+      }
+
+      return {
+        ...row,
+        label: shortDate(row.match_date),
+        currentValue,
+        changeDirection,
+      };
+    });
+  }, [selectedPlayerTimeline, chartMode]);
 
   const chartStats = useMemo(() => {
-    if (selectedPlayerHistory.length === 0) return null;
+    if (chartSeries.length === 0) return null;
 
-    const first = Number(selectedPlayerHistory[0].pre_rating);
-    const last = Number(selectedPlayerHistory[selectedPlayerHistory.length - 1].post_rating);
-    const min = Math.min(...chartValues);
-    const max = Math.max(...chartValues);
+    const values = chartSeries.map((r) => r.currentValue);
+    const first = values[0];
+    const last = values[values.length - 1];
+    const min = Math.min(...values);
+    const max = Math.max(...values);
 
     return {
       first,
       last,
-      change: last - first,
       min,
       max,
+      change: last - first,
     };
-  }, [selectedPlayerHistory, chartValues]);
+  }, [chartSeries]);
+
+  const chartGeometry = useMemo(() => {
+    const values = chartSeries.map((r) => r.currentValue);
+    const labels = chartSeries.map((r) => r.label);
+    const directions = chartSeries.map((r) => r.changeDirection);
+    return buildChartGeometry(values, labels, directions, chartMode);
+  }, [chartSeries, chartMode]);
 
   const slotMatchMap = useMemo(() => {
     const map = new Map<number, Match>();
@@ -694,6 +776,27 @@ export default function Page() {
           color: active ? 'white' : '#111827',
           cursor: 'pointer',
           fontWeight: 700,
+        }}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  function modeButton(label: string, mode: ChartMode) {
+    const active = chartMode === mode;
+    return (
+      <button
+        onClick={() => setChartMode(mode)}
+        style={{
+          padding: '8px 12px',
+          borderRadius: 10,
+          border: active ? 'none' : '1px solid #d1d5db',
+          background: active ? '#111827' : 'white',
+          color: active ? 'white' : '#111827',
+          cursor: 'pointer',
+          fontWeight: 700,
+          fontSize: 13,
         }}
       >
         {label}
@@ -1465,32 +1568,37 @@ export default function Page() {
             >
               <div>
                 <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a' }}>
-                  Evolución de ranking
+                  Evolución
                 </div>
                 <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
                   Jugador: {chartPlayerName || '—'}
                 </div>
               </div>
 
-              <select
-                value={chartPlayerName}
-                onChange={(e) => setSelectedChartPlayer(e.target.value)}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 12,
-                  border: '1px solid #d1d5db',
-                  background: 'white',
-                  minWidth: 220,
-                }}
-              >
-                {[...rankingPlayers]
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                {modeButton('Posición', 'position')}
+                {modeButton('Puntos', 'points')}
+
+                <select
+                  value={chartPlayerName}
+                  onChange={(e) => setSelectedChartPlayer(e.target.value)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid #d1d5db',
+                    background: 'white',
+                    minWidth: 220,
+                  }}
+                >
+                  {[...rankingPlayers]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
             </div>
 
             {chartStats && (
@@ -1513,7 +1621,10 @@ export default function Page() {
                     color: '#334155',
                   }}
                 >
-                  Inicio: {Math.round(chartStats.first)}
+                  Inicio:{' '}
+                  {chartMode === 'position'
+                    ? `#${Math.round(chartStats.first)}`
+                    : Math.round(chartStats.first)}
                 </div>
                 <div
                   style={{
@@ -1526,60 +1637,60 @@ export default function Page() {
                     color: '#1d4ed8',
                   }}
                 >
-                  Actual: {Math.round(chartStats.last)}
+                  Actual:{' '}
+                  {chartMode === 'position'
+                    ? `#${Math.round(chartStats.last)}`
+                    : Math.round(chartStats.last)}
                 </div>
                 <div
                   style={{
                     padding: '6px 10px',
                     borderRadius: 999,
-                    background: chartStats.change >= 0 ? '#ecfdf5' : '#fef2f2',
-                    border: `1px solid ${chartStats.change >= 0 ? '#bbf7d0' : '#fecaca'}`,
+                    background:
+                      chartMode === 'position'
+                        ? chartStats.change <= 0
+                          ? '#ecfdf5'
+                          : '#fef2f2'
+                        : chartStats.change >= 0
+                        ? '#ecfdf5'
+                        : '#fef2f2',
+                    border: `1px solid ${
+                      chartMode === 'position'
+                        ? chartStats.change <= 0
+                          ? '#bbf7d0'
+                          : '#fecaca'
+                        : chartStats.change >= 0
+                        ? '#bbf7d0'
+                        : '#fecaca'
+                    }`,
                     fontSize: 13,
                     fontWeight: 700,
-                    color: chartStats.change >= 0 ? '#166534' : '#b91c1c',
+                    color:
+                      chartMode === 'position'
+                        ? chartStats.change <= 0
+                          ? '#166534'
+                          : '#b91c1c'
+                        : chartStats.change >= 0
+                        ? '#166534'
+                        : '#b91c1c',
                   }}
                 >
-                  {chartStats.change >= 0 ? '+' : ''}
-                  {chartStats.change.toFixed(2)}
-                </div>
-                <div
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 999,
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: '#334155',
-                  }}
-                >
-                  Mín: {Math.round(chartStats.min)}
-                </div>
-                <div
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 999,
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: '#334155',
-                  }}
-                >
-                  Máx: {Math.round(chartStats.max)}
+                  {chartMode === 'position'
+                    ? `${chartStats.change <= 0 ? '' : '+'}${chartStats.change.toFixed(0)} puestos`
+                    : `${chartStats.change >= 0 ? '+' : ''}${chartStats.change.toFixed(2)} pts`}
                 </div>
               </div>
             )}
 
-            {selectedPlayerHistory.length > 0 ? (
+            {chartGeometry.points.length > 0 ? (
               <div style={{ overflowX: 'auto' }}>
                 <svg
-                  width="760"
-                  height="260"
-                  viewBox="0 0 760 260"
+                  width={chartGeometry.width}
+                  height={chartGeometry.height}
+                  viewBox={`0 0 ${chartGeometry.width} ${chartGeometry.height}`}
                   style={{
                     width: '100%',
-                    maxWidth: 760,
+                    maxWidth: chartGeometry.width,
                     height: 'auto',
                     display: 'block',
                     background: '#f8fafc',
@@ -1587,20 +1698,20 @@ export default function Page() {
                     border: '1px solid #e2e8f0',
                   }}
                 >
-                  {[0, 1, 2, 3].map((i) => (
+                  {chartGeometry.gridYs.map((y, i) => (
                     <line
                       key={i}
-                      x1="24"
-                      x2="736"
-                      y1={24 + i * 70}
-                      y2={24 + i * 70}
+                      x1="40"
+                      x2={chartGeometry.width - 20}
+                      y1={y}
+                      y2={y}
                       stroke="#e2e8f0"
                       strokeWidth="1"
                     />
                   ))}
 
                   <path
-                    d={chartPath}
+                    d={chartGeometry.path}
                     fill="none"
                     stroke="#2563eb"
                     strokeWidth="3"
@@ -1608,36 +1719,44 @@ export default function Page() {
                     strokeLinejoin="round"
                   />
 
-                  {chartValues.map((v, i) => {
-                    const min = Math.min(...chartValues);
-                    const max = Math.max(...chartValues);
-                    const range = max - min || 1;
-                    const usableWidth = 760 - 48;
-                    const usableHeight = 260 - 48;
-                    const x =
-                      chartValues.length === 1
-                        ? 380
-                        : 24 + (i / (chartValues.length - 1)) * usableWidth;
-                    const y = 24 + ((max - v) / range) * usableHeight;
+                  {chartGeometry.points.map((p, i) => {
+                    const fill =
+                      p.changeDirection === 'up'
+                        ? '#16a34a'
+                        : p.changeDirection === 'down'
+                        ? '#dc2626'
+                        : '#64748b';
 
                     return (
                       <g key={i}>
-                        <circle cx={x} cy={y} r="4" fill="#1d4ed8" />
-                        {i === chartValues.length - 1 && (
-                          <text
-                            x={x}
-                            y={y - 10}
-                            textAnchor="middle"
-                            fontSize="12"
-                            fontWeight="700"
-                            fill="#1d4ed8"
-                          >
-                            {Math.round(v)}
-                          </text>
-                        )}
+                        <circle cx={p.x} cy={p.y} r="5" fill={fill} />
+                        <text
+                          x={p.x}
+                          y={chartGeometry.height - 16}
+                          textAnchor="middle"
+                          fontSize="11"
+                          fill="#64748b"
+                        >
+                          {p.label}
+                        </text>
                       </g>
                     );
                   })}
+
+                  {chartGeometry.points.length > 0 && (
+                    <text
+                      x={chartGeometry.points[chartGeometry.points.length - 1].x}
+                      y={chartGeometry.points[chartGeometry.points.length - 1].y - 10}
+                      textAnchor="middle"
+                      fontSize="12"
+                      fontWeight="700"
+                      fill="#1d4ed8"
+                    >
+                      {chartMode === 'position'
+                        ? `#${Math.round(chartGeometry.points[chartGeometry.points.length - 1].value)}`
+                        : Math.round(chartGeometry.points[chartGeometry.points.length - 1].value)}
+                    </text>
+                  )}
                 </svg>
               </div>
             ) : (
