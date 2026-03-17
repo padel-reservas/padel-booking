@@ -205,6 +205,8 @@ export default function Page() {
   const [resultForm, setResultForm] = useState<ResultFormState | null>(null);
   const [savingResult, setSavingResult] = useState(false);
 
+  const [myPlayerName, setMyPlayerName] = useState<string>('');
+
   const canSeeAdmin = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
@@ -246,7 +248,44 @@ export default function Page() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem('myPlayerName');
+    if (saved) setMyPlayerName(saved);
+  }, []);
+
+  function handleSelectMyPlayer(name: string) {
+    setMyPlayerName(name);
+    window.localStorage.setItem('myPlayerName', name);
+  }
+
+  function clearMyPlayer() {
+    setMyPlayerName('');
+    window.localStorage.removeItem('myPlayerName');
+  }
+
   const rankingStats = useMemo(() => statsMap(rankingPlayers), [rankingPlayers]);
+
+  const myRankingSummary = useMemo(() => {
+    if (!myPlayerName) return null;
+
+    const sorted = [...rankingPlayers].sort((a, b) => {
+      if (b.display_rating !== a.display_rating) return b.display_rating - a.display_rating;
+      if (b.elo_rating !== a.elo_rating) return b.elo_rating - a.elo_rating;
+      return a.name.localeCompare(b.name);
+    });
+
+    const idx = sorted.findIndex(
+      (p) => p.name.trim().toLowerCase() === myPlayerName.trim().toLowerCase()
+    );
+
+    if (idx === -1) return null;
+
+    const player = sorted[idx];
+    return {
+      position: idx + 1,
+      player,
+    };
+  }, [rankingPlayers, myPlayerName]);
 
   const slotMatchMap = useMemo(() => {
     const map = new Map<number, Match>();
@@ -1207,6 +1246,112 @@ export default function Page() {
             </div>
           </div>
 
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              marginBottom: 18,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>¿Quién sos?</div>
+
+            <select
+              value={myPlayerName}
+              onChange={(e) => handleSelectMyPlayer(e.target.value)}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 12,
+                border: '1px solid #d1d5db',
+                background: 'white',
+                minWidth: 220,
+              }}
+            >
+              <option value="">Elegir jugador</option>
+              {[...rankingPlayers]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+
+            {myPlayerName && (
+              <button
+                onClick={clearMyPlayer}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid #d1d5db',
+                  background: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Cambiar
+              </button>
+            )}
+          </div>
+
+          {myRankingSummary && (
+            <div
+              style={{
+                marginBottom: 18,
+                padding: 16,
+                borderRadius: 18,
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 12,
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ fontWeight: 800, color: '#1e3a8a' }}>
+                Vos estás #{myRankingSummary.position}
+              </div>
+              <div
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 999,
+                  background: '#1d4ed8',
+                  color: 'white',
+                  fontWeight: 800,
+                  fontSize: 13,
+                }}
+              >
+                {Math.round(Number(myRankingSummary.player.display_rating))} pts
+              </div>
+              <div style={{ color: '#334155', fontWeight: 700 }}>
+                {myRankingSummary.player.wins}G - {myRankingSummary.player.losses}P
+              </div>
+              <div style={{ color: '#334155', fontWeight: 700 }}>
+                {Number(myRankingSummary.player.win_pct).toFixed(2)}%
+              </div>
+              <div
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  background:
+                    myRankingSummary.player.current_win_streak > 0 ? '#fff7ed' : '#f8fafc',
+                  color:
+                    myRankingSummary.player.current_win_streak > 0 ? '#c2410c' : '#64748b',
+                  border: `1px solid ${
+                    myRankingSummary.player.current_win_streak > 0 ? '#fdba74' : '#e2e8f0'
+                  }`,
+                }}
+              >
+                {myRankingSummary.player.current_win_streak > 0
+                  ? `🔥 ${myRankingSummary.player.current_win_streak}`
+                  : 'Racha 0'}
+              </div>
+            </div>
+          )}
+
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
             <thead>
               <tr>
@@ -1240,12 +1385,20 @@ export default function Page() {
                 })
                 .map((p, idx) => {
                   const isTop3 = idx < 3;
+                  const isMe =
+                    myPlayerName &&
+                    p.name.trim().toLowerCase() === myPlayerName.trim().toLowerCase();
 
-                  const rowBg =
-                    idx === 0 ? '#fffbea'
-                    : idx === 1 ? '#f8fafc'
-                    : idx === 2 ? '#fff7ed'
-                    : idx % 2 === 0 ? 'white'
+                  const rowBg = isMe
+                    ? '#eff6ff'
+                    : idx === 0
+                    ? '#fffbea'
+                    : idx === 1
+                    ? '#f8fafc'
+                    : idx === 2
+                    ? '#fff7ed'
+                    : idx % 2 === 0
+                    ? 'white'
                     : '#fcfcfd';
 
                   return (
@@ -1266,7 +1419,23 @@ export default function Page() {
                           borderBottom: '1px solid #eef2f7',
                         }}
                       >
-                        <div style={{ fontWeight: 800 }}>{p.name}</div>
+                        <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span>{p.name}</span>
+                          {isMe && (
+                            <span
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: 999,
+                                fontSize: 11,
+                                fontWeight: 800,
+                                background: '#1d4ed8',
+                                color: 'white',
+                              }}
+                            >
+                              Vos
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td
