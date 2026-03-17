@@ -36,6 +36,8 @@ type RankingPlayer = {
   sets_won: number;
   sets_lost: number;
   provisional: boolean;
+  current_win_streak: number;
+  best_win_streak: number;
 };
 
 type Match = {
@@ -1174,7 +1176,7 @@ export default function Page() {
         >
           <h2 style={{ marginTop: 0 }}>Ranking</h2>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
                 <th style={{ padding: '10px 8px' }}>#</th>
@@ -1185,6 +1187,8 @@ export default function Page() {
                 <th style={{ padding: '10px 8px' }}>P</th>
                 <th style={{ padding: '10px 8px' }}>%</th>
                 <th style={{ padding: '10px 8px' }}>Prov.</th>
+                <th style={{ padding: '10px 8px' }}>Racha</th>
+                <th style={{ padding: '10px 8px' }}>Mejor</th>
               </tr>
             </thead>
             <tbody>
@@ -1204,6 +1208,8 @@ export default function Page() {
                     <td style={{ padding: '10px 8px' }}>{p.losses}</td>
                     <td style={{ padding: '10px 8px' }}>{Number(p.win_pct).toFixed(2)}%</td>
                     <td style={{ padding: '10px 8px' }}>{p.provisional ? 'Sí' : 'No'}</td>
+                    <td style={{ padding: '10px 8px' }}>{p.current_win_streak}</td>
+                    <td style={{ padding: '10px 8px' }}>{p.best_win_streak}</td>
                   </tr>
                 ))}
             </tbody>
