@@ -1168,29 +1168,80 @@ export default function Page() {
         <div
           style={{
             background: 'white',
-            borderRadius: 20,
-            padding: 20,
+            borderRadius: 24,
+            padding: 24,
             border: '1px solid #e5e7eb',
             overflowX: 'auto',
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)',
           }}
         >
-          <h2 style={{ marginTop: 0 }}>Ranking</h2>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+              marginBottom: 18,
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0, fontSize: 24 }}>Ranking</h2>
+              <div style={{ marginTop: 6, color: '#64748b', fontSize: 14 }}>
+                Puntos = display rating ajustado del sistema
+              </div>
+            </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+            <div
+              style={{
+                padding: '8px 12px',
+                borderRadius: 999,
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                color: '#334155',
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              {rankingPlayers.length} jugadores
+            </div>
+          </div>
+
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
             <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
-                <th style={{ padding: '10px 8px' }}>#</th>
-                <th style={{ padding: '10px 8px' }}>Jugador</th>
-                <th style={{ padding: '10px 8px' }}>Puntos</th>
-                <th style={{ padding: '10px 8px' }}>PJ</th>
-                <th style={{ padding: '10px 8px' }}>G</th>
-                <th style={{ padding: '10px 8px' }}>P</th>
-                <th style={{ padding: '10px 8px' }}>%</th>
-                <th style={{ padding: '10px 8px' }}>Prov.</th>
-                <th style={{ padding: '10px 8px' }}>Racha</th>
-                <th style={{ padding: '10px 8px' }}>Mejor</th>
+              <tr>
+                {[
+                  '#',
+                  'Jugador',
+                  'Puntos',
+                  'PJ',
+                  'G',
+                  'P',
+                  '%',
+                  'Prov.',
+                  'Racha',
+                  'Mejor',
+                ].map((label) => (
+                  <th
+                    key={label}
+                    style={{
+                      textAlign: 'left',
+                      padding: '14px 12px',
+                      fontSize: 13,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      color: '#475569',
+                      background: '#f8fafc',
+                      borderTop: '1px solid #e5e7eb',
+                      borderBottom: '1px solid #e5e7eb',
+                    }}
+                  >
+                    {label}
+                  </th>
+                ))}
               </tr>
             </thead>
+
             <tbody>
               {[...rankingPlayers]
                 .sort((a, b) => {
@@ -1198,20 +1249,170 @@ export default function Page() {
                   if (b.elo_rating !== a.elo_rating) return b.elo_rating - a.elo_rating;
                   return a.name.localeCompare(b.name);
                 })
-                .map((p, idx) => (
-                  <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '10px 8px', fontWeight: 700 }}>{idx + 1}</td>
-                    <td style={{ padding: '10px 8px', fontWeight: 700 }}>{p.name}</td>
-                    <td style={{ padding: '10px 8px' }}>{Math.round(Number(p.display_rating))}</td>
-                    <td style={{ padding: '10px 8px' }}>{p.matches_played}</td>
-                    <td style={{ padding: '10px 8px' }}>{p.wins}</td>
-                    <td style={{ padding: '10px 8px' }}>{p.losses}</td>
-                    <td style={{ padding: '10px 8px' }}>{Number(p.win_pct).toFixed(2)}%</td>
-                    <td style={{ padding: '10px 8px' }}>{p.provisional ? 'Sí' : 'No'}</td>
-                    <td style={{ padding: '10px 8px' }}>{p.current_win_streak}</td>
-                    <td style={{ padding: '10px 8px' }}>{p.best_win_streak}</td>
-                  </tr>
-                ))}
+                .map((p, idx) => {
+                  const isTop3 = idx < 3;
+                  const rowBg =
+                    idx === 0
+                      ? '#fffbea'
+                      : idx === 1
+                      ? '#f8fafc'
+                      : idx === 2
+                      ? '#fff7ed'
+                      : idx % 2 === 0
+                      ? 'white'
+                      : '#fcfcfd';
+
+                  return (
+                    <tr
+                      key={p.id}
+                      style={{
+                        background: rowBg,
+                      }}
+                    >
+                      <td
+                        style={{
+                          padding: '14px 12px',
+                          borderBottom: '1px solid #eef2f7',
+                          fontWeight: 800,
+                          color: isTop3 ? '#111827' : '#334155',
+                          width: 60,
+                        }}
+                      >
+                        {idx + 1}
+                      </td>
+
+                      <td
+                        style={{
+                          padding: '14px 12px',
+                          borderBottom: '1px solid #eef2f7',
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 15 }}>{p.name}</div>
+                        <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>
+                          Elo: {Math.round(Number(p.elo_rating))}
+                        </div>
+                      </td>
+
+                      <td
+                        style={{
+                          padding: '14px 12px',
+                          borderBottom: '1px solid #eef2f7',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '6px 10px',
+                            borderRadius: 999,
+                            background: isTop3 ? '#111827' : '#eff6ff',
+                            color: isTop3 ? 'white' : '#1d4ed8',
+                            fontWeight: 800,
+                            fontSize: 14,
+                          }}
+                        >
+                          {Math.round(Number(p.display_rating))}
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>
+                        {p.matches_played}
+                      </td>
+
+                      <td
+                        style={{
+                          padding: '14px 12px',
+                          borderBottom: '1px solid #eef2f7',
+                          color: '#166534',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {p.wins}
+                      </td>
+
+                      <td
+                        style={{
+                          padding: '14px 12px',
+                          borderBottom: '1px solid #eef2f7',
+                          color: '#b91c1c',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {p.losses}
+                      </td>
+
+                      <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            color:
+                              p.win_pct >= 60
+                                ? '#166534'
+                                : p.win_pct >= 45
+                                ? '#92400e'
+                                : '#475569',
+                          }}
+                        >
+                          {Number(p.win_pct).toFixed(2)}%
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '5px 10px',
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            background: p.provisional ? '#fef2f2' : '#ecfdf5',
+                            color: p.provisional ? '#b91c1c' : '#166534',
+                            border: `1px solid ${p.provisional ? '#fecaca' : '#bbf7d0'}`,
+                          }}
+                        >
+                          {p.provisional ? 'Sí' : 'No'}
+                        </span>
+                      </td>
+
+                      <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '5px 10px',
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 800,
+                            background: p.current_win_streak > 0 ? '#fff7ed' : '#f8fafc',
+                            color: p.current_win_streak > 0 ? '#c2410c' : '#64748b',
+                            border: `1px solid ${p.current_win_streak > 0 ? '#fdba74' : '#e2e8f0'}`,
+                          }}
+                        >
+                          {p.current_win_streak > 0 ? `🔥 ${p.current_win_streak}` : '0'}
+                        </span>
+                      </td>
+
+                      <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '5px 10px',
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            background: '#f8fafc',
+                            color: '#334155',
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                          {p.best_win_streak}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
