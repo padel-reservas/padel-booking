@@ -8,13 +8,12 @@ const adminPin = process.env.ADMIN_PIN!;
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
 async function runRecalculateRankings() {
-  const { error } = await supabase.rpc('recalculate_rankings');
+  const { error } = await supabase.rpc('recalculate_rankings_v2');
 
   if (error) {
     throw new Error(`No se pudo recalcular rankings: ${error.message}`);
   }
 }
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
