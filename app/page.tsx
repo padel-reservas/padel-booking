@@ -97,6 +97,11 @@ type ChartPoint = {
   changeDirection: 'up' | 'down' | 'flat';
 };
 
+type H2HMatch = Match & {
+  sideOfPlayerA: 'A' | 'B';
+  winnerLabel: 'A' | 'B';
+};
+
 function todayISO() {
   const d = new Date();
   const year = d.getFullYear();
@@ -268,6 +273,8 @@ export default function Page() {
   const [ratingHistory, setRatingHistory] = useState<PlayerRatingHistoryPoint[]>([]);
 
   const [selectedChartPlayer, setSelectedChartPlayer] = useState<string>('');
+  const [h2hPlayerA, setH2hPlayerA] = useState<string>('');
+  const [h2hPlayerB, setH2hPlayerB] = useState<string>('');
 
   const [nameInput, setNameInput] = useState<Record<number, string>>({});
   const [showAdmin, setShowAdmin] = useState(false);
@@ -333,6 +340,14 @@ export default function Page() {
       return rankingData[0]?.name || '';
     });
 
+    setH2hPlayerA((prev) => prev || myPlayerName || rankingData[0]?.name || '');
+    setH2hPlayerB((prev) => {
+      if (prev) return prev;
+      const fallbackA = myPlayerName || rankingData[0]?.name || '';
+      const another = rankingData.find((p) => p.name !== fallbackA)?.name || '';
+      return another;
+    });
+
     setLoading(false);
   }
 
@@ -345,12 +360,14 @@ export default function Page() {
     if (saved) {
       setMyPlayerName(saved);
       setSelectedChartPlayer(saved);
+      setH2hPlayerA(saved);
     }
   }, []);
 
   function handleSelectMyPlayer(name: string) {
     setMyPlayerName(name);
     setSelectedChartPlayer(name);
+    setH2hPlayerA(name);
     window.localStorage.setItem('myPlayerName', name);
   }
 
@@ -398,7 +415,11 @@ export default function Page() {
 
     if (currentPlayer) {
       const currentValue = Number(currentPlayer.display_rating);
-      if (points.length === 0 || Math.round(points[points.length - 1] * 100) / 100 !== Math.round(currentValue * 100) / 100) {
+      if (
+        points.length === 0 ||
+        Math.round(points[points.length - 1] * 100) / 100 !==
+          Math.round(currentValue * 100) / 100
+      ) {
         points.push(currentValue);
       }
     }
@@ -426,6 +447,90 @@ export default function Page() {
   const chartGeometry = useMemo(() => {
     return buildPointsChartGeometry(selectedPlayerHistory);
   }, [selectedPlayerHistory]);
+
+  const h2hData = useMemo(() => {
+    if (!h2hPlayerA || !h2hPlayerB || h2hPlayerA === h2hPlayerB) {
+      return {
+        matches: [] as H2HMatch[],
+        winsA: 0,
+        winsB: 0,
+        total: 0,
+        winPctA: 0,
+        currentStreakText: '',
+      };
+    }
+
+    const playerA = rankingPlayers.find(
+      (p) => p.name.trim().toLowerCase() === h2hPlayerA.trim().toLowerCase()
+    );
+    const playerB = rankingPlayers.find(
+      (p) => p.name.trim().toLowerCase() === h2hPlayerB.trim().toLowerCase()
+    );
+
+    if (!playerA || !playerB) {
+      return {
+        matches: [] as H2HMatch[],
+        winsA: 0,
+        winsB: 0,
+        total: 0,
+        winPctA: 0,
+        currentStreakText: '',
+      };
+    }
+
+    const filtered = matches
+      .filter((m) => {
+        const aInTeamA =
+          m.team_a_player_1_id === playerA.id || m.team_a_player_2_id === playerA.id;
+        const aInTeamB =
+          m.team_b_player_1_id === playerA.id || m.team_b_player_2_id === playerA.id;
+        const bInTeamA =
+          m.team_a_player_1_id === playerB.id || m.team_a_player_2_id === playerB.id;
+        const bInTeamB =
+          m.team_b_player_1_id === playerB.id || m.team_b_player_2_id === playerB.id;
+
+        return (aInTeamA && bInTeamB) || (aInTeamB && bInTeamA);
+      })
+      .map((m) => {
+        const aInTeamA =
+          m.team_a_player_1_id === playerA.id || m.team_a_player_2_id === playerA.id;
+        const sideOfPlayerA: 'A' | 'B' = aInTeamA ? 'A' : 'B';
+        const winnerLabel: 'A' | 'B' = m.winner_team === sideOfPlayerA ? 'A' : 'B';
+        return {
+          ...m,
+          sideOfPlayerA,
+          winnerLabel,
+        };
+      });
+
+    const winsA = filtered.filter((m) => m.winnerLabel === 'A').length;
+    const winsB = filtered.filter((m) => m.winnerLabel === 'B').length;
+    const total = filtered.length;
+    const winPctA = total > 0 ? (winsA * 100) / total : 0;
+
+    let currentStreakText = '';
+    if (filtered.length > 0) {
+      let streakCount = 0;
+      const latestWinner = filtered[0].winnerLabel;
+      for (const m of filtered) {
+        if (m.winnerLabel === latestWinner) streakCount += 1;
+        else break;
+      }
+      currentStreakText =
+        latestWinner === 'A'
+          ? `${h2hPlayerA} lleva ${streakCount}`
+          : `${h2hPlayerB} lleva ${streakCount}`;
+    }
+
+    return {
+      matches: filtered,
+      winsA,
+      winsB,
+      total,
+      winPctA,
+      currentStreakText,
+    };
+  }, [matches, rankingPlayers, h2hPlayerA, h2hPlayerB]);
 
   const slotMatchMap = useMemo(() => {
     const map = new Map<number, Match>();
@@ -1667,6 +1772,225 @@ export default function Page() {
               >
                 No hay historial suficiente para mostrar el gráfico.
               </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              marginBottom: 18,
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
+              borderRadius: 20,
+              padding: 18,
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a', marginBottom: 14 }}>
+              Head-to-head
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: 10,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                marginBottom: 14,
+              }}
+            >
+              <select
+                value={h2hPlayerA}
+                onChange={(e) => setH2hPlayerA(e.target.value)}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  border: '1px solid #d1d5db',
+                  background: 'white',
+                  minWidth: 220,
+                }}
+              >
+                <option value="">Jugador A</option>
+                {[...rankingPlayers]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+              </select>
+
+              <div style={{ fontWeight: 800, color: '#64748b' }}>vs</div>
+
+              <select
+                value={h2hPlayerB}
+                onChange={(e) => setH2hPlayerB(e.target.value)}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  border: '1px solid #d1d5db',
+                  background: 'white',
+                  minWidth: 220,
+                }}
+              >
+                <option value="">Jugador B</option>
+                {[...rankingPlayers]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {h2hPlayerA && h2hPlayerB && h2hPlayerA === h2hPlayerB ? (
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 14,
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  color: '#64748b',
+                }}
+              >
+                Elegí dos jugadores distintos.
+              </div>
+            ) : (
+              <>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    marginBottom: 14,
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      background: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      color: '#1d4ed8',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {h2hPlayerA || 'Jugador A'} {h2hData.winsA} - {h2hData.winsB} {h2hPlayerB || 'Jugador B'}
+                  </div>
+
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#334155',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Partidos: {h2hData.total}
+                  </div>
+
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#334155',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Win % {h2hPlayerA || 'A'}: {h2hData.winPctA.toFixed(1)}%
+                  </div>
+
+                  {h2hData.currentStreakText && (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 14,
+                        background: '#fff7ed',
+                        border: '1px solid #fdba74',
+                        color: '#c2410c',
+                        fontWeight: 800,
+                      }}
+                    >
+                      {h2hData.currentStreakText}
+                    </div>
+                  )}
+                </div>
+
+                {h2hData.matches.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 14,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#64748b',
+                    }}
+                  >
+                    No hay cruces cargados entre esos dos jugadores.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {h2hData.matches.map((m) => {
+                      const teamA = `${playerNameById(rankingPlayers, m.team_a_player_1_id)} / ${playerNameById(
+                        rankingPlayers,
+                        m.team_a_player_2_id
+                      )}`;
+                      const teamB = `${playerNameById(rankingPlayers, m.team_b_player_1_id)} / ${playerNameById(
+                        rankingPlayers,
+                        m.team_b_player_2_id
+                      )}`;
+
+                      return (
+                        <div
+                          key={m.id}
+                          style={{
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 14,
+                            padding: 14,
+                            background: '#fcfcfd',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 8,
+                              flexWrap: 'wrap',
+                              marginBottom: 8,
+                            }}
+                          >
+                            <div style={{ fontWeight: 800 }}>
+                              {formatDate(m.match_date)}
+                              {m.match_time ? ` · ${m.match_time}` : ''}
+                            </div>
+
+                            <div
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 999,
+                                background: m.winnerLabel === 'A' ? '#ecfdf5' : '#fef2f2',
+                                border: `1px solid ${m.winnerLabel === 'A' ? '#bbf7d0' : '#fecaca'}`,
+                                color: m.winnerLabel === 'A' ? '#166534' : '#b91c1c',
+                                fontWeight: 800,
+                                fontSize: 12,
+                              }}
+                            >
+                              Ganó {m.winnerLabel === 'A' ? h2hPlayerA : h2hPlayerB}
+                            </div>
+                          </div>
+
+                          <div style={{ color: '#334155', marginBottom: 4 }}>Team A: {teamA}</div>
+                          <div style={{ color: '#334155', marginBottom: 6 }}>Team B: {teamB}</div>
+                          <div style={{ fontWeight: 800 }}>Score: {scoreText(m)}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
