@@ -61,14 +61,15 @@ type Match = {
   created_at?: string;
 };
 
-type PlayerTimelinePoint = {
+type PlayerRatingHistoryPoint = {
   player_id: number;
   player_name: string;
   match_id: number;
   match_date: string;
   match_time: string | null;
+  pre_rating: number;
   post_rating: number;
-  rank_position: number;
+  delta: number;
 };
 
 type TabKey = 'turnos' | 'ranking' | 'historial';
@@ -89,6 +90,13 @@ type ResultFormState = {
   notes: string;
 };
 
+type ChartPoint = {
+  x: number;
+  y: number;
+  value: number;
+  changeDirection: 'up' | 'down' | 'flat';
+};
+
 function todayISO() {
   const d = new Date();
   const year = d.getFullYear();
@@ -101,14 +109,6 @@ function formatDate(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00`);
   return d.toLocaleDateString('es-AR', {
     weekday: 'short',
-    day: 'numeric',
-    month: 'numeric',
-  });
-}
-
-function shortDate(dateStr: string) {
-  const d = new Date(`${dateStr}T00:00:00`);
-  return d.toLocaleDateString('es-AR', {
     day: 'numeric',
     month: 'numeric',
   });
@@ -203,25 +203,13 @@ function rankingPlayerIdFromSlotPlayerId(
   return rankingPlayer?.id ?? null;
 }
 
-type ChartPoint = {
-  x: number;
-  y: number;
-  value: number;
-  label: string;
-  changeDirection: 'up' | 'down' | 'flat';
-};
-
-function buildPointsChartGeometry(
-  values: number[],
-  labels: string[],
-  directions: Array<'up' | 'down' | 'flat'>
-) {
+function buildPointsChartGeometry(values: number[]) {
   const width = 760;
-  const height = 300;
+  const height = 280;
   const paddingLeft = 40;
   const paddingRight = 20;
   const paddingTop = 24;
-  const paddingBottom = 50;
+  const paddingBottom = 28;
 
   if (values.length === 0) {
     return {
@@ -247,12 +235,17 @@ function buildPointsChartGeometry(
 
     const y = paddingTop + ((max - value) / range) * usableHeight;
 
+    let changeDirection: 'up' | 'down' | 'flat' = 'flat';
+    if (i > 0) {
+      if (value > values[i - 1]) changeDirection = 'up';
+      else if (value < values[i - 1]) changeDirection = 'down';
+    }
+
     return {
       x,
       y,
       value,
-      label: labels[i],
-      changeDirection: directions[i],
+      changeDirection,
     };
   });
 
@@ -272,7 +265,7 @@ export default function Page() {
   const [slotPlayers, setSlotPlayers] = useState<SlotPlayer[]>([]);
   const [rankingPlayers, setRankingPlayers] = useState<RankingPlayer[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
-  const [timeline, setTimeline] = useState<PlayerTimelinePoint[]>([]);
+  const [ratingHistory, setRatingHistory] = useState<PlayerRatingHistoryPoint[]>([]);
 
   const [selectedChartPlayer, setSelectedChartPlayer] = useState<string>('');
 
@@ -304,42 +297,35 @@ export default function Page() {
       { data: slotPlayersData },
       { data: rankingPlayersData },
       { data: matchesData },
-      { data: timelineData },
+      { data: ratingHistoryData },
     ] = await Promise.all([
       supabase.from('slots').select('*').order('date').order('time'),
       supabase.from('players').select('*').order('created_at', { ascending: true }),
       supabase
-        .from('player_ranking_timeline')
+        .from('ranking_players')
         .select('*')
-        .order('match_date', { ascending: true })
-        .order('match_id', { ascending: true }),
+        .order('display_rating', { ascending: false })
+        .order('elo_rating', { ascending: false })
+        .order('name', { ascending: true }),
       supabase
         .from('matches')
         .select('*')
         .order('match_date', { ascending: false })
         .order('id', { ascending: false }),
       supabase
-        .from('player_ranking_timeline')
+        .from('player_rating_history')
         .select('*')
         .order('match_date', { ascending: true })
         .order('match_id', { ascending: true }),
     ]);
 
-    // importante: ranking_players sigue viniendo de la tabla real actual
-    const { data: rankingPlayersFresh } = await supabase
-      .from('ranking_players')
-      .select('*')
-      .order('display_rating', { ascending: false })
-      .order('elo_rating', { ascending: false })
-      .order('name', { ascending: true });
-
-    const rankingData = (rankingPlayersFresh || []) as RankingPlayer[];
+    const rankingData = (rankingPlayersData || []) as RankingPlayer[];
 
     setSlots((slotsData || []) as Slot[]);
     setSlotPlayers((slotPlayersData || []) as SlotPlayer[]);
     setRankingPlayers(rankingData);
     setMatches((matchesData || []) as Match[]);
-    setTimeline((timelineData || []) as PlayerTimelinePoint[]);
+    setRatingHistory((ratingHistoryData || []) as PlayerRatingHistoryPoint[]);
 
     setSelectedChartPlayer((prev) => {
       if (prev) return prev;
@@ -399,41 +385,34 @@ export default function Page() {
 
   const chartPlayerName = selectedChartPlayer || myPlayerName || rankingPlayers[0]?.name || '';
 
-  const selectedPlayerTimeline = useMemo(() => {
-    return timeline.filter(
+  const selectedPlayerHistory = useMemo(() => {
+    const rows = ratingHistory.filter(
       (r) => r.player_name.trim().toLowerCase() === chartPlayerName.trim().toLowerCase()
     );
-  }, [timeline, chartPlayerName]);
 
-  const chartSeries = useMemo(() => {
-    if (selectedPlayerTimeline.length === 0) return [];
+    const currentPlayer = rankingPlayers.find(
+      (p) => p.name.trim().toLowerCase() === chartPlayerName.trim().toLowerCase()
+    );
 
-    return selectedPlayerTimeline.map((row, index) => {
-      const prev = selectedPlayerTimeline[index - 1];
-      const currentValue = Number(row.post_rating);
-      const previousValue = prev ? Number(prev.post_rating) : currentValue;
+    const points = rows.map((r) => Number(r.post_rating));
 
-      let changeDirection: 'up' | 'down' | 'flat' = 'flat';
-      if (currentValue > previousValue) changeDirection = 'up';
-      else if (currentValue < previousValue) changeDirection = 'down';
+    if (currentPlayer) {
+      const currentValue = Number(currentPlayer.display_rating);
+      if (points.length === 0 || Math.round(points[points.length - 1] * 100) / 100 !== Math.round(currentValue * 100) / 100) {
+        points.push(currentValue);
+      }
+    }
 
-      return {
-        ...row,
-        label: shortDate(row.match_date),
-        currentValue,
-        changeDirection,
-      };
-    });
-  }, [selectedPlayerTimeline]);
+    return points;
+  }, [ratingHistory, rankingPlayers, chartPlayerName]);
 
   const chartStats = useMemo(() => {
-    if (chartSeries.length === 0) return null;
+    if (selectedPlayerHistory.length === 0) return null;
 
-    const values = chartSeries.map((r) => r.currentValue);
-    const first = values[0];
-    const last = values[values.length - 1];
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const first = selectedPlayerHistory[0];
+    const last = selectedPlayerHistory[selectedPlayerHistory.length - 1];
+    const min = Math.min(...selectedPlayerHistory);
+    const max = Math.max(...selectedPlayerHistory);
 
     return {
       first,
@@ -442,14 +421,11 @@ export default function Page() {
       max,
       change: last - first,
     };
-  }, [chartSeries]);
+  }, [selectedPlayerHistory]);
 
   const chartGeometry = useMemo(() => {
-    const values = chartSeries.map((r) => r.currentValue);
-    const labels = chartSeries.map((r) => r.label);
-    const directions = chartSeries.map((r) => r.changeDirection);
-    return buildPointsChartGeometry(values, labels, directions);
-  }, [chartSeries]);
+    return buildPointsChartGeometry(selectedPlayerHistory);
+  }, [selectedPlayerHistory]);
 
   const slotMatchMap = useMemo(() => {
     const map = new Map<number, Match>();
@@ -1662,20 +1638,7 @@ export default function Page() {
                         ? '#dc2626'
                         : '#64748b';
 
-                    return (
-                      <g key={i}>
-                        <circle cx={p.x} cy={p.y} r="5" fill={fill} />
-                        <text
-                          x={p.x}
-                          y={chartGeometry.height - 16}
-                          textAnchor="middle"
-                          fontSize="11"
-                          fill="#64748b"
-                        >
-                          {p.label}
-                        </text>
-                      </g>
-                    );
+                    return <circle key={i} cx={p.x} cy={p.y} r="5" fill={fill} />;
                   })}
 
                   {chartGeometry.points.length > 0 && (
