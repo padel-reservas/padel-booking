@@ -15,10 +15,125 @@ async function runRecalculateRankings() {
   }
 }
 
+async function validateSubmitterForSlot(slotId: number, submittedByPlayerId: number) {
+  const { data: slotPlayers, error } = await supabase
+    .from('players')
+    .select('id, name, created_at')
+    .eq('slot_id', slotId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw new Error(`No se pudieron leer los jugadores del turno: ${error.message}`);
+  }
+
+  const firstFour = (slotPlayers || []).slice(0, 4);
+
+  if (firstFour.length !== 4) {
+    throw new Error('El turno debe tener exactamente 4 jugadores para cargar resultado.');
+  }
+
+  const slotNames = firstFour.map((p) => String(p.name).trim().toLowerCase());
+
+  const { data: rankingPlayers, error: rankingError } = await supabase
+    .from('ranking_players')
+    .select('id, name');
+
+  if (rankingError) {
+    throw new Error(`No se pudieron validar los jugadores del ranking: ${rankingError.message}`);
+  }
+
+  const allowedRankingIds = (rankingPlayers || [])
+    .filter((p) => slotNames.includes(String(p.name).trim().toLowerCase()))
+    .map((p) => p.id);
+
+  if (!allowedRankingIds.includes(submittedByPlayerId)) {
+    throw new Error('Solo uno de los 4 jugadores del turno puede cargar el resultado.');
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { pin, action } = body;
+
+    if (action === 'submitMatch') {
+      const {
+        match_date,
+        match_time,
+        slot_id,
+        team_a_player_1_id,
+        team_a_player_2_id,
+        team_b_player_1_id,
+        team_b_player_2_id,
+        set1_a,
+        set1_b,
+        set2_a,
+        set2_b,
+        set3_a,
+        set3_b,
+        winner_team,
+        source,
+        notes,
+        submitted_by_player_id,
+      } = body;
+
+      if (!slot_id) {
+        return NextResponse.json({ error: 'Falta slot_id' }, { status: 400 });
+      }
+
+      if (!submitted_by_player_id) {
+        return NextResponse.json({ error: 'Falta submitted_by_player_id' }, { status: 400 });
+      }
+
+      const { data: existingMatch, error: existingError } = await supabase
+        .from('matches')
+        .select('id')
+        .eq('slot_id', slot_id)
+        .maybeSingle();
+
+      if (existingError) {
+        return NextResponse.json({ error: existingError.message }, { status: 400 });
+      }
+
+      if (existingMatch) {
+        return NextResponse.json(
+          { error: 'Ese turno ya tiene resultado cargado.' },
+          { status: 400 }
+        );
+      }
+
+      await validateSubmitterForSlot(slot_id, submitted_by_player_id);
+
+      const payload = {
+        match_date,
+        match_time,
+        slot_id,
+        team_a_player_1_id,
+        team_a_player_2_id,
+        team_b_player_1_id,
+        team_b_player_2_id,
+        set1_a,
+        set1_b,
+        set2_a,
+        set2_b,
+        set3_a,
+        set3_b,
+        winner_team,
+        source: source || 'slot',
+        notes: notes || null,
+        submitted_by_player_id,
+        submitted_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from('matches').insert(payload);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      await runRecalculateRankings();
+      return NextResponse.json({ ok: true, mode: 'submitted' });
+    }
 
     if (!pin || pin !== adminPin) {
       return NextResponse.json({ error: 'PIN inválido' }, { status: 401 });
