@@ -58,6 +58,8 @@ type Match = {
   winner_team: 'A' | 'B' | null;
   source: string | null;
   notes: string | null;
+  submitted_by_player_id?: number | null;
+  submitted_at?: string | null;
   created_at?: string;
 };
 
@@ -77,6 +79,7 @@ type TabKey = 'turnos' | 'ranking' | 'duelo' | 'historial';
 type ResultFormState = {
   slotId: number;
   editingMatchId: number | null;
+  submittedByPlayerId: number | '';
   teamA1: number | '';
   teamA2: number | '';
   teamB1: number | '';
@@ -704,10 +707,15 @@ export default function Page() {
   }
 
   async function adminAction(action: any) {
+    const payload =
+      action.action === 'submitMatch'
+        ? action
+        : { ...action, pin };
+
     const res = await fetch('/api/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...action, pin }),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json().catch(() => ({}));
@@ -716,7 +724,7 @@ export default function Page() {
       return { ok: true, data };
     }
 
-    alert(data.error || `Error admin (${res.status})`);
+    alert(data.error || `Error (${res.status})`);
     return { ok: false, data };
   }
 
@@ -742,6 +750,7 @@ export default function Page() {
     setResultForm({
       slotId,
       editingMatchId: null,
+      submittedByPlayerId: '',
       teamA1: p1,
       teamA2: p2,
       teamB1: p3,
@@ -776,6 +785,7 @@ export default function Page() {
     setResultForm({
       slotId,
       editingMatchId: m.id,
+      submittedByPlayerId: '',
       teamA1: slotPlayerIdByRankingId(m.team_a_player_1_id),
       teamA2: slotPlayerIdByRankingId(m.team_a_player_2_id),
       teamB1: slotPlayerIdByRankingId(m.team_b_player_1_id),
@@ -799,10 +809,6 @@ export default function Page() {
 
   async function saveResult() {
     if (!resultForm) return;
-    if (!adminUnlocked) {
-      alert('Primero tenés que entrar como admin para guardar o editar resultados.');
-      return;
-    }
 
     const slot = slotsWithPlayers.find((s) => s.id === resultForm.slotId);
     if (!slot) {
@@ -872,28 +878,62 @@ export default function Page() {
       return;
     }
 
+    if (!resultForm.editingMatchId && !adminUnlocked && !resultForm.submittedByPlayerId) {
+      alert('Elegí quién está cargando el resultado.');
+      return;
+    }
+
+    if (resultForm.editingMatchId && !adminUnlocked) {
+      alert('Solo el admin puede editar resultados.');
+      return;
+    }
+
     setSavingResult(true);
 
-    const res = await adminAction({
-      action: 'saveMatch',
-      matchId: resultForm.editingMatchId,
-      match_date: slot.date,
-      match_time: slot.time,
-      slot_id: slot.id,
-      team_a_player_1_id: rankingIdA1,
-      team_a_player_2_id: rankingIdA2,
-      team_b_player_1_id: rankingIdB1,
-      team_b_player_2_id: rankingIdB2,
-      set1_a: parseSetValue(resultForm.set1A),
-      set1_b: parseSetValue(resultForm.set1B),
-      set2_a: parseSetValue(resultForm.set2A),
-      set2_b: parseSetValue(resultForm.set2B),
-      set3_a: parseSetValue(resultForm.set3A),
-      set3_b: parseSetValue(resultForm.set3B),
-      winner_team: winnerTeam,
-      source: 'slot',
-      notes: resultForm.notes.trim() || null,
-    });
+    const actionPayload =
+      adminUnlocked || resultForm.editingMatchId
+        ? {
+            action: 'saveMatch',
+            matchId: resultForm.editingMatchId,
+            match_date: slot.date,
+            match_time: slot.time,
+            slot_id: slot.id,
+            team_a_player_1_id: rankingIdA1,
+            team_a_player_2_id: rankingIdA2,
+            team_b_player_1_id: rankingIdB1,
+            team_b_player_2_id: rankingIdB2,
+            set1_a: parseSetValue(resultForm.set1A),
+            set1_b: parseSetValue(resultForm.set1B),
+            set2_a: parseSetValue(resultForm.set2A),
+            set2_b: parseSetValue(resultForm.set2B),
+            set3_a: parseSetValue(resultForm.set3A),
+            set3_b: parseSetValue(resultForm.set3B),
+            winner_team: winnerTeam,
+            source: 'slot',
+            notes: resultForm.notes.trim() || null,
+          }
+        : {
+            action: 'submitMatch',
+            match_date: slot.date,
+            match_time: slot.time,
+            slot_id: slot.id,
+            team_a_player_1_id: rankingIdA1,
+            team_a_player_2_id: rankingIdA2,
+            team_b_player_1_id: rankingIdB1,
+            team_b_player_2_id: rankingIdB2,
+            set1_a: parseSetValue(resultForm.set1A),
+            set1_b: parseSetValue(resultForm.set1B),
+            set2_a: parseSetValue(resultForm.set2A),
+            set2_b: parseSetValue(resultForm.set2B),
+            set3_a: parseSetValue(resultForm.set3A),
+            set3_b: parseSetValue(resultForm.set3B),
+            winner_team: winnerTeam,
+            source: 'slot',
+            notes: resultForm.notes.trim() || null,
+            submitted_by_player_id: resultForm.submittedByPlayerId,
+          };
+
+    const res = await adminAction(actionPayload);
 
     setSavingResult(false);
 
@@ -1279,7 +1319,7 @@ export default function Page() {
                           {isFull ? 'Lista de espera' : 'Anotar'}
                         </button>
 
-                        {!hasMatch && slot.activePlayers.length === 4 && adminUnlocked && (
+                        {!hasMatch && slot.activePlayers.length === 4 && (
                           <button
                             onClick={() => openNewResultModal(slot.id)}
                             style={{
@@ -1292,7 +1332,7 @@ export default function Page() {
                               fontWeight: 700,
                             }}
                           >
-                            Subir resultado
+                            {adminUnlocked ? 'Subir resultado' : 'Cargar resultado'}
                           </button>
                         )}
 
@@ -1451,6 +1491,12 @@ export default function Page() {
                             {playerNameById(rankingPlayers, slot.match.team_b_player_2_id)}
                           </div>
                           <div style={{ fontWeight: 700 }}>Score: {scoreText(slot.match)}</div>
+                          {slot.match.submitted_by_player_id && (
+                            <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
+                              Cargado por:{' '}
+                              {playerNameById(rankingPlayers, slot.match.submitted_by_player_id)}
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -2529,6 +2575,12 @@ export default function Page() {
                   </div>
                 )}
 
+                {m.submitted_by_player_id && (
+                  <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
+                    Cargado por: {playerNameById(rankingPlayers, m.submitted_by_player_id)}
+                  </div>
+                )}
+
                 {m.notes && (
                   <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
                     {m.notes}
@@ -2580,6 +2632,49 @@ export default function Page() {
                   </div>
 
                   <div style={{ display: 'grid', gap: 14 }}>
+                    {!resultForm.editingMatchId && (
+                      <div>
+                        <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                          Quién carga el resultado
+                        </div>
+                        <select
+                          value={resultForm.submittedByPlayerId}
+                          onChange={(e) =>
+                            setResultForm((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    submittedByPlayerId:
+                                      e.target.value === '' ? '' : Number(e.target.value),
+                                  }
+                                : prev
+                            )
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                            width: '100%',
+                          }}
+                        >
+                          <option value="">Elegir jugador</option>
+                          {players.map((p) => {
+                            const rankingId = rankingPlayerIdFromSlotPlayerId(
+                              p.id,
+                              slotPlayers,
+                              rankingPlayers
+                            );
+                            if (!rankingId) return null;
+                            return (
+                              <option key={p.id} value={rankingId}>
+                                {p.name}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    )}
+
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: 8 }}>Pareja A</div>
                       <div style={{ display: 'grid', gap: 8 }}>
