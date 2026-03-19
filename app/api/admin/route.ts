@@ -56,6 +56,25 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { pin, action } = body;
 
+    if (action === 'selfTogglePaid') {
+      const { playerId, paid } = body;
+
+      if (!playerId || typeof paid !== 'boolean') {
+        return NextResponse.json({ error: 'Faltan datos para actualizar pago' }, { status: 400 });
+      }
+
+      const { error } = await supabase
+        .from('players')
+        .update({ paid })
+        .eq('id', playerId);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ ok: true, mode: 'self-paid-updated' });
+    }
+
     if (action === 'submitMatch') {
       const {
         match_date,
@@ -201,6 +220,8 @@ export async function POST(req: Request) {
         winner_team,
         source,
         notes,
+        submitted_by_player_id,
+        submitted_at,
       } = body;
 
       const payload = {
@@ -233,7 +254,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, mode: 'updated' });
       }
 
-      const { error } = await supabase.from('matches').insert(payload);
+      const insertPayload = {
+        ...payload,
+        submitted_by_player_id: submitted_by_player_id || null,
+        submitted_at: submitted_at || (submitted_by_player_id ? new Date().toISOString() : null),
+      };
+
+      const { error } = await supabase.from('matches').insert(insertPayload);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 400 });
