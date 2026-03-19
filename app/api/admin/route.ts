@@ -201,6 +201,78 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'addRankingPlayer') {
+      const rawName = String(body.name || '').trim();
+
+      if (!rawName) {
+        return NextResponse.json({ error: 'Falta el nombre del jugador' }, { status: 400 });
+      }
+
+      const normalized = rawName.toLowerCase();
+
+      const { data: existingPlayers, error: existingError } = await supabase
+        .from('ranking_players')
+        .select('id, name');
+
+      if (existingError) {
+        return NextResponse.json({ error: existingError.message }, { status: 400 });
+      }
+
+      const alreadyExists = (existingPlayers || []).some(
+        (p) => String(p.name).trim().toLowerCase() === normalized
+      );
+
+      if (alreadyExists) {
+        return NextResponse.json(
+          { error: 'Ese jugador ya existe en ranking_players' },
+          { status: 400 }
+        );
+      }
+
+      const { data: configRow, error: configError } = await supabase
+        .from('ranking_config')
+        .select('initial_rating')
+        .eq('id', 1)
+        .single();
+
+      if (configError) {
+        return NextResponse.json(
+          { error: `No se pudo leer ranking_config: ${configError.message}` },
+          { status: 400 }
+        );
+      }
+
+      const initialRating = Number(configRow?.initial_rating);
+
+      if (!Number.isFinite(initialRating)) {
+        return NextResponse.json(
+          { error: 'initial_rating inválido en ranking_config' },
+          { status: 400 }
+        );
+      }
+
+      const { error } = await supabase.from('ranking_players').insert({
+        name: rawName,
+        elo_rating: initialRating,
+        display_rating: initialRating,
+        matches_played: 0,
+        wins: 0,
+        losses: 0,
+        win_pct: 0,
+        sets_won: 0,
+        sets_lost: 0,
+        provisional: true,
+        current_win_streak: 0,
+        best_win_streak: 0,
+      });
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ ok: true, mode: 'ranking-player-added' });
+    }
+
     if (action === 'saveMatch') {
       const {
         matchId,
