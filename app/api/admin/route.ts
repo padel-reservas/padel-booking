@@ -87,9 +87,7 @@ async function ensureSlotExists(slotId: number) {
 }
 
 async function getRankingPlayersMap() {
-  const { data, error } = await supabase
-    .from('ranking_players')
-    .select('id, name');
+  const { data, error } = await supabase.from('ranking_players').select('id, name');
 
   if (error) {
     throw new Error(`No se pudieron leer los jugadores del ranking: ${error.message}`);
@@ -139,7 +137,9 @@ function validateSetPair(a: unknown, b: unknown, label: string) {
   }
 }
 
-function validateMatchPayload(input: MatchPayloadInput) {
+function validateMatchPayload(input: MatchPayloadInput, options?: { requireSlotId?: boolean }) {
+  const requireSlotId = options?.requireSlotId ?? true;
+
   const {
     match_date,
     match_time,
@@ -161,12 +161,19 @@ function validateMatchPayload(input: MatchPayloadInput) {
     throw new Error('Falta match_date.');
   }
 
-  if (!match_time || typeof match_time !== 'string') {
-    throw new Error('Falta match_time.');
+  if (match_time != null && typeof match_time !== 'string') {
+    throw new Error('match_time inválido.');
   }
 
-  if (!isPositiveInteger(slot_id)) {
-    throw new Error('Falta slot_id válido.');
+  if (requireSlotId) {
+    if (!isPositiveInteger(slot_id)) {
+      throw new Error('Falta slot_id válido.');
+    }
+  } else {
+    const slotProvided = slot_id !== null && slot_id !== undefined && slot_id !== '';
+    if (slotProvided && !isPositiveInteger(slot_id)) {
+      throw new Error('slot_id inválido.');
+    }
   }
 
   const ids = [
@@ -213,10 +220,7 @@ async function ensureRankingPlayersExist(playerIds: number[]) {
 }
 
 async function ensureNoExistingMatchForSlot(slotId: number, excludedMatchId?: number) {
-  let query = supabase
-    .from('matches')
-    .select('id, slot_id')
-    .eq('slot_id', slotId);
+  let query = supabase.from('matches').select('id, slot_id').eq('slot_id', slotId);
 
   if (excludedMatchId) {
     query = query.neq('id', excludedMatchId);
@@ -236,8 +240,11 @@ async function ensureNoExistingMatchForSlot(slotId: number, excludedMatchId?: nu
 function buildMatchPayload(body: MatchPayloadInput) {
   return {
     match_date: body.match_date!,
-    match_time: body.match_time!,
-    slot_id: body.slot_id!,
+    match_time: body.match_time ?? null,
+    slot_id:
+      body.slot_id === undefined || body.slot_id === null || body.slot_id === ''
+        ? null
+        : body.slot_id,
     team_a_player_1_id: body.team_a_player_1_id!,
     team_a_player_2_id: body.team_a_player_2_id!,
     team_b_player_1_id: body.team_b_player_1_id!,
@@ -249,7 +256,7 @@ function buildMatchPayload(body: MatchPayloadInput) {
     set3_a: body.set3_a ?? null,
     set3_b: body.set3_b ?? null,
     winner_team: body.winner_team!,
-    source: body.source || 'slot',
+    source: body.source || 'manual',
     notes: body.notes?.trim() ? body.notes.trim() : null,
   };
 }
@@ -290,10 +297,7 @@ export async function POST(req: Request) {
 
       await ensurePlayerRegistrationExists(playerId);
 
-      const { error } = await supabase
-        .from('players')
-        .update({ paid })
-        .eq('id', playerId);
+      const { error } = await supabase.from('players').update({ paid }).eq('id', playerId);
 
       if (error) {
         return fail(error.message, 400);
@@ -310,7 +314,7 @@ export async function POST(req: Request) {
       }
 
       try {
-        validateMatchPayload(body);
+        validateMatchPayload(body, { requireSlotId: true });
         await ensureSlotExists(Number(body.slot_id));
         await ensureNoExistingMatchForSlot(Number(body.slot_id));
         await ensureRankingPlayersExist([
@@ -419,10 +423,7 @@ export async function POST(req: Request) {
 
       await ensurePlayerRegistrationExists(playerId);
 
-      const { error } = await supabase
-        .from('players')
-        .update({ paid })
-        .eq('id', playerId);
+      const { error } = await supabase.from('players').update({ paid }).eq('id', playerId);
 
       if (error) {
         return fail(error.message, 400);
@@ -496,17 +497,25 @@ export async function POST(req: Request) {
 
     if (action === 'saveMatch') {
       const matchId = body?.matchId ? Number(body.matchId) : null;
+      const slotProvided =
+        body?.slot_id !== null &&
+        body?.slot_id !== undefined &&
+        String(body?.slot_id).trim() !== '';
 
       try {
-        validateMatchPayload(body);
-        await ensureSlotExists(Number(body.slot_id));
+        validateMatchPayload(body, { requireSlotId: false });
+
+        if (slotProvided) {
+          await ensureSlotExists(Number(body.slot_id));
+          await ensureNoExistingMatchForSlot(Number(body.slot_id), matchId || undefined);
+        }
+
         await ensureRankingPlayersExist([
           Number(body.team_a_player_1_id),
           Number(body.team_a_player_2_id),
           Number(body.team_b_player_1_id),
           Number(body.team_b_player_2_id),
         ]);
-        await ensureNoExistingMatchForSlot(Number(body.slot_id), matchId || undefined);
       } catch (validationError: any) {
         return fail(validationError?.message || 'Datos inválidos para saveMatch.', 400);
       }
@@ -514,10 +523,7 @@ export async function POST(req: Request) {
       const payload = buildMatchPayload(body);
 
       if (matchId) {
-        const { error } = await supabase
-          .from('matches')
-          .update(payload)
-          .eq('id', matchId);
+        const { error } = await supabase.from('matches').update(payload).eq('id', matchId);
 
         if (error) {
           return fail(error.message, 400);
@@ -537,9 +543,7 @@ export async function POST(req: Request) {
       const insertPayload = {
         ...payload,
         submitted_by_player_id: submittedByPlayerId,
-        submitted_at:
-          body?.submitted_at ||
-          (submittedByPlayerId ? new Date().toISOString() : null),
+        submitted_at: body?.submitted_at || (submittedByPlayerId ? new Date().toISOString() : null),
       };
 
       const { error } = await supabase.from('matches').insert(insertPayload);
