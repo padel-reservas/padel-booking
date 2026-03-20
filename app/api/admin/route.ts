@@ -7,14 +7,6 @@ const adminPin = process.env.ADMIN_PIN!;
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-// ------------------------
-// Helpers
-// ------------------------
-
-function isPositiveInteger(n: any) {
-  return Number.isInteger(n) && n > 0;
-}
-
 async function runRecalculateRankings() {
   const { error } = await supabase.rpc('recalculate_rankings_v2');
 
@@ -59,18 +51,10 @@ async function validateSubmitterForSlot(slotId: number, submittedByPlayerId: num
   }
 }
 
-// ------------------------
-// MAIN
-// ------------------------
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { pin, action } = body;
-
-    // ------------------------
-    // PUBLIC ACTIONS
-    // ------------------------
 
     if (action === 'selfTogglePaid') {
       const { playerId, paid } = body;
@@ -88,7 +72,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, mode: 'self-paid-updated' });
     }
 
     if (action === 'submitMatch') {
@@ -120,11 +104,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Falta submitted_by_player_id' }, { status: 400 });
       }
 
-      const { data: existingMatch } = await supabase
+      const { data: existingMatch, error: existingError } = await supabase
         .from('matches')
         .select('id')
         .eq('slot_id', slot_id)
         .maybeSingle();
+
+      if (existingError) {
+        return NextResponse.json({ error: existingError.message }, { status: 400 });
+      }
 
       if (existingMatch) {
         return NextResponse.json(
@@ -163,21 +151,16 @@ export async function POST(req: Request) {
       }
 
       await runRecalculateRankings();
-
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, mode: 'submitted' });
     }
-
-    // ------------------------
-    // ADMIN VALIDATION
-    // ------------------------
 
     if (!pin || pin !== adminPin) {
       return NextResponse.json({ error: 'PIN inválido' }, { status: 401 });
     }
 
-    // ------------------------
-    // ADMIN ACTIONS
-    // ------------------------
+    if (action === 'noop') {
+      return NextResponse.json({ ok: true });
+    }
 
     if (action === 'createSlot') {
       const { date, time } = body;
@@ -194,13 +177,33 @@ export async function POST(req: Request) {
     if (action === 'deleteSlot') {
       const { slotId } = body;
 
+      const { data: relatedMatches, error: relatedMatchesError } = await supabase
+        .from('matches')
+        .select('id')
+        .eq('slot_id', slotId);
+
+      if (relatedMatchesError) {
+        return NextResponse.json({ error: relatedMatchesError.message }, { status: 400 });
+      }
+
+      if ((relatedMatches || []).length > 0) {
+        const { error: detachError } = await supabase
+          .from('matches')
+          .update({ slot_id: null })
+          .eq('slot_id', slotId);
+
+        if (detachError) {
+          return NextResponse.json({ error: detachError.message }, { status: 400 });
+        }
+      }
+
       const { error } = await supabase.from('slots').delete().eq('id', slotId);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, mode: 'slot-deleted-kept-matches' });
     }
 
     if (action === 'togglePaid') {
@@ -225,13 +228,48 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Falta el nombre del jugador' }, { status: 400 });
       }
 
-      const { data: configRow } = await supabase
+      const normalized = rawName.toLowerCase();
+
+      const { data: existingPlayers, error: existingError } = await supabase
+        .from('ranking_players')
+        .select('id, name');
+
+      if (existingError) {
+        return NextResponse.json({ error: existingError.message }, { status: 400 });
+      }
+
+      const alreadyExists = (existingPlayers || []).some(
+        (p) => String(p.name).trim().toLowerCase() === normalized
+      );
+
+      if (alreadyExists) {
+        return NextResponse.json(
+          { error: 'Ese jugador ya existe en ranking_players' },
+          { status: 400 }
+        );
+      }
+
+      const { data: configRow, error: configError } = await supabase
         .from('ranking_config')
         .select('initial_rating')
         .eq('id', 1)
         .single();
 
+      if (configError) {
+        return NextResponse.json(
+          { error: `No se pudo leer ranking_config: ${configError.message}` },
+          { status: 400 }
+        );
+      }
+
       const initialRating = Number(configRow?.initial_rating);
+
+      if (!Number.isFinite(initialRating)) {
+        return NextResponse.json(
+          { error: 'initial_rating inválido en ranking_config' },
+          { status: 400 }
+        );
+      }
 
       const { error } = await supabase.from('ranking_players').insert({
         name: rawName,
@@ -252,10 +290,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, mode: 'ranking-player-added' });
     }
 
-    // 🔥 FIX: soporta matches SIN slot (manual)
     if (action === 'saveMatch') {
       const {
         matchId,
@@ -276,6 +313,7 @@ export async function POST(req: Request) {
         source,
         notes,
         submitted_by_player_id,
+        submitted_at,
       } = body;
 
       const payload = {
@@ -293,7 +331,7 @@ export async function POST(req: Request) {
         set3_a,
         set3_b,
         winner_team,
-        source: source || 'manual',
+        source: source || (slot_id ? 'slot' : 'manual'),
         notes: notes || null,
       };
 
@@ -305,27 +343,31 @@ export async function POST(req: Request) {
         }
 
         await runRecalculateRankings();
-
-        return NextResponse.json({ ok: true });
+        return NextResponse.json({ ok: true, mode: 'updated' });
       }
 
-      const { error } = await supabase.from('matches').insert({
+      const insertPayload = {
         ...payload,
-        submitted_by_player_id,
-        submitted_at: new Date().toISOString(),
-      });
+        submitted_by_player_id: submitted_by_player_id || null,
+        submitted_at: submitted_at || (submitted_by_player_id ? new Date().toISOString() : null),
+      };
+
+      const { error } = await supabase.from('matches').insert(insertPayload);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
       await runRecalculateRankings();
-
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, mode: 'inserted' });
     }
 
     if (action === 'deleteMatch') {
       const { matchId } = body;
+
+      if (!matchId) {
+        return NextResponse.json({ error: 'Falta matchId' }, { status: 400 });
+      }
 
       const { error } = await supabase.from('matches').delete().eq('id', matchId);
 
@@ -334,8 +376,7 @@ export async function POST(req: Request) {
       }
 
       await runRecalculateRankings();
-
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, mode: 'deleted' });
     }
 
     return NextResponse.json({ error: 'Acción inválida' }, { status: 400 });
