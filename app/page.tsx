@@ -2660,31 +2660,31 @@ export default function Page() {
 
       {!loading && activeTab === 'historial' && (
         <div style={{ display: 'grid', gap: 12 }}>
-          {adminUnlocked && (
+          <div
+            style={{
+              background: 'white',
+              borderRadius: 18,
+              padding: 16,
+              border: '1px solid #e5e7eb',
+            }}
+          >
             <div
               style={{
-                background: 'white',
-                borderRadius: 18,
-                padding: 16,
-                border: '1px solid #e5e7eb',
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                alignItems: 'center',
+                flexWrap: 'wrap',
               }}
             >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 18 }}>Carga manual de resultados</div>
-                  <div style={{ color: '#64748b', marginTop: 4, fontSize: 14 }}>
-                    Para subir partidos viejos sin crear un turno.
-                  </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 18 }}>Carga manual de resultados</div>
+                <div style={{ color: '#64748b', marginTop: 4, fontSize: 14 }}>
+                  Para subir partidos viejos sin crear un turno.
                 </div>
+              </div>
 
+              {adminUnlocked ? (
                 <button
                   onClick={openManualHistoryResultModal}
                   style={{
@@ -2699,9 +2699,23 @@ export default function Page() {
                 >
                   Subir resultado manual
                 </button>
-              </div>
+              ) : (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 12,
+                    background: '#f8fafc',
+                    border: '1px solid #e5e7eb',
+                    color: '#64748b',
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  Entrá como admin desde Turnos para habilitar esta función
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {matches.length === 0 && (
             <div
