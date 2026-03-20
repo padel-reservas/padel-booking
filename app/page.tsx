@@ -2789,7 +2789,7 @@ export default function Page() {
           </div>
 
           <div style={{ marginTop: 10, color: '#334155', fontWeight: 700 }}>
-            Resultado: {scoreText(m)}
+            Resultado TEST: {scoreText(m)}
           </div>
 
           {m.winner_team && (
