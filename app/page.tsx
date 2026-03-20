@@ -2678,7 +2678,7 @@ export default function Page() {
               }}
             >
               <div>
-                <div style={{ fontWeight: 800, fontSize: 18 }}>Carga manual de resultados</div>
+                <div style={{ fontWeight: 800, fontSize: 18 }}>TEST HISTORIAL MANUAL</div>
                 <div style={{ color: '#64748b', marginTop: 4, fontSize: 14 }}>
                   Para subir partidos viejos sin crear un turno.
                 </div>
