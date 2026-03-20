@@ -75,11 +75,15 @@ type PlayerRatingHistoryPoint = {
 };
 
 type TabKey = 'turnos' | 'ranking' | 'duelo' | 'historial';
+type ResultFormMode = 'slot' | 'manual';
 
 type ResultFormState = {
-  slotId: number;
+  mode: ResultFormMode;
+  slotId: number | null;
   editingMatchId: number | null;
   submittedByPlayerId: number | '';
+  manualDate: string;
+  manualTime: string;
   teamA1: number | '';
   teamA2: number | '';
   teamB1: number | '';
@@ -749,9 +753,12 @@ export default function Page() {
     const p4 = slot.activePlayers[3]?.id ?? '';
 
     setResultForm({
+      mode: 'slot',
       slotId,
       editingMatchId: null,
       submittedByPlayerId: '',
+      manualDate: slot.date,
+      manualTime: slot.time,
       teamA1: p1,
       teamA2: p2,
       teamB1: p3,
@@ -784,9 +791,12 @@ export default function Page() {
     };
 
     setResultForm({
+      mode: 'slot',
       slotId,
       editingMatchId: m.id,
       submittedByPlayerId: '',
+      manualDate: m.match_date,
+      manualTime: m.match_time || '',
       teamA1: slotPlayerIdByRankingId(m.team_a_player_1_id),
       teamA2: slotPlayerIdByRankingId(m.team_a_player_2_id),
       teamB1: slotPlayerIdByRankingId(m.team_b_player_1_id),
@@ -803,6 +813,35 @@ export default function Page() {
     setResultModalOpen(true);
   }
 
+  function openManualHistoryResultModal() {
+    if (!adminUnlocked) {
+      alert('Primero tenés que entrar como admin.');
+      return;
+    }
+
+    setResultForm({
+      mode: 'manual',
+      slotId: null,
+      editingMatchId: null,
+      submittedByPlayerId: '',
+      manualDate: todayISO(),
+      manualTime: '',
+      teamA1: '',
+      teamA2: '',
+      teamB1: '',
+      teamB2: '',
+      set1A: '',
+      set1B: '',
+      set2A: '',
+      set2B: '',
+      set3A: '',
+      set3B: '',
+      notes: '',
+    });
+
+    setResultModalOpen(true);
+  }
+
   function closeResultModal() {
     setResultModalOpen(false);
     setResultForm(null);
@@ -811,8 +850,12 @@ export default function Page() {
   async function saveResult() {
     if (!resultForm) return;
 
-    const slot = slotsWithPlayers.find((s) => s.id === resultForm.slotId);
-    if (!slot) {
+    const isManual = resultForm.mode === 'manual';
+    const slot = !isManual
+      ? slotsWithPlayers.find((s) => s.id === resultForm.slotId)
+      : null;
+
+    if (!isManual && !slot) {
       alert('No se encontró el turno.');
       return;
     }
@@ -829,42 +872,54 @@ export default function Page() {
       return;
     }
 
-    const slotPlayerIds = selectedIds as number[];
-    const uniqueIds = new Set(slotPlayerIds);
+    const uniqueIds = new Set(selectedIds as number[]);
 
     if (uniqueIds.size !== 4) {
       alert('No podés repetir jugadores en las parejas.');
       return;
     }
 
-    const validSlotPlayerIds = new Set(slot.activePlayers.map((p) => p.id));
-    const allValid = slotPlayerIds.every((id) => validSlotPlayerIds.has(id));
+    let rankingIdA1: number | null = null;
+    let rankingIdA2: number | null = null;
+    let rankingIdB1: number | null = null;
+    let rankingIdB2: number | null = null;
 
-    if (!allValid) {
-      alert('Solo podés usar los 4 jugadores de ese turno.');
-      return;
+    if (isManual) {
+      rankingIdA1 = resultForm.teamA1 as number;
+      rankingIdA2 = resultForm.teamA2 as number;
+      rankingIdB1 = resultForm.teamB1 as number;
+      rankingIdB2 = resultForm.teamB2 as number;
+    } else {
+      const slotPlayerIds = selectedIds as number[];
+      const validSlotPlayerIds = new Set(slot!.activePlayers.map((p) => p.id));
+      const allValid = slotPlayerIds.every((id) => validSlotPlayerIds.has(id));
+
+      if (!allValid) {
+        alert('Solo podés usar los 4 jugadores de ese turno.');
+        return;
+      }
+
+      rankingIdA1 = rankingPlayerIdFromSlotPlayerId(
+        resultForm.teamA1 as number,
+        slotPlayers,
+        rankingPlayers
+      );
+      rankingIdA2 = rankingPlayerIdFromSlotPlayerId(
+        resultForm.teamA2 as number,
+        slotPlayers,
+        rankingPlayers
+      );
+      rankingIdB1 = rankingPlayerIdFromSlotPlayerId(
+        resultForm.teamB1 as number,
+        slotPlayers,
+        rankingPlayers
+      );
+      rankingIdB2 = rankingPlayerIdFromSlotPlayerId(
+        resultForm.teamB2 as number,
+        slotPlayers,
+        rankingPlayers
+      );
     }
-
-    const rankingIdA1 = rankingPlayerIdFromSlotPlayerId(
-      resultForm.teamA1 as number,
-      slotPlayers,
-      rankingPlayers
-    );
-    const rankingIdA2 = rankingPlayerIdFromSlotPlayerId(
-      resultForm.teamA2 as number,
-      slotPlayers,
-      rankingPlayers
-    );
-    const rankingIdB1 = rankingPlayerIdFromSlotPlayerId(
-      resultForm.teamB1 as number,
-      slotPlayers,
-      rankingPlayers
-    );
-    const rankingIdB2 = rankingPlayerIdFromSlotPlayerId(
-      resultForm.teamB2 as number,
-      slotPlayers,
-      rankingPlayers
-    );
 
     if (!rankingIdA1 || !rankingIdA2 || !rankingIdB1 || !rankingIdB2) {
       alert(
@@ -889,16 +944,25 @@ export default function Page() {
       return;
     }
 
+    if (isManual && !adminUnlocked) {
+      alert('Solo el admin puede cargar resultados manuales desde historial.');
+      return;
+    }
+
     setSavingResult(true);
+
+    const matchDate = isManual ? resultForm.manualDate : slot!.date;
+    const matchTime = isManual ? resultForm.manualTime || null : slot!.time;
+    const slotId = isManual ? null : slot!.id;
 
     const actionPayload =
       adminUnlocked || resultForm.editingMatchId
         ? {
             action: 'saveMatch',
             matchId: resultForm.editingMatchId,
-            match_date: slot.date,
-            match_time: slot.time,
-            slot_id: slot.id,
+            match_date: matchDate,
+            match_time: matchTime,
+            slot_id: slotId,
             team_a_player_1_id: rankingIdA1,
             team_a_player_2_id: rankingIdA2,
             team_b_player_1_id: rankingIdB1,
@@ -910,16 +974,16 @@ export default function Page() {
             set3_a: parseSetValue(resultForm.set3A),
             set3_b: parseSetValue(resultForm.set3B),
             winner_team: winnerTeam,
-            source: 'slot',
+            source: isManual ? 'manual' : 'slot',
             notes: resultForm.notes.trim() || null,
             submitted_by_player_id: resultForm.submittedByPlayerId || null,
             submitted_at: resultForm.submittedByPlayerId ? new Date().toISOString() : null,
           }
         : {
             action: 'submitMatch',
-            match_date: slot.date,
-            match_time: slot.time,
-            slot_id: slot.id,
+            match_date: matchDate,
+            match_time: matchTime,
+            slot_id: slotId,
             team_a_player_1_id: rankingIdA1,
             team_a_player_2_id: rankingIdA2,
             team_b_player_1_id: rankingIdB1,
@@ -931,7 +995,7 @@ export default function Page() {
             set3_a: parseSetValue(resultForm.set3A),
             set3_b: parseSetValue(resultForm.set3B),
             winner_team: winnerTeam,
-            source: 'slot',
+            source: isManual ? 'manual' : 'slot',
             notes: resultForm.notes.trim() || null,
             submitted_by_player_id: resultForm.submittedByPlayerId,
           };
@@ -953,7 +1017,10 @@ export default function Page() {
     }
 
     const slot = slotsWithPlayers.find((s) => s.id === slotId);
-    if (!slot || !slot.match) return;
+    if (!slot || !slot.match) {
+      alert('No se encontró el resultado asociado a ese turno.');
+      return;
+    }
 
     const ok = window.confirm('¿Seguro que querés borrar este resultado?');
     if (!ok) return;
@@ -961,6 +1028,25 @@ export default function Page() {
     const res = await adminAction({
       action: 'deleteMatch',
       matchId: slot.match.id,
+    });
+
+    if (!res.ok) return;
+
+    await loadData();
+  }
+
+  async function deleteMatchById(matchId: number) {
+    if (!adminUnlocked) {
+      alert('Primero tenés que entrar como admin para borrar resultados.');
+      return;
+    }
+
+    const ok = window.confirm('¿Seguro que querés borrar este resultado?');
+    if (!ok) return;
+
+    const res = await adminAction({
+      action: 'deleteMatch',
+      matchId,
     });
 
     if (!res.ok) return;
@@ -987,6 +1073,8 @@ export default function Page() {
       </button>
     );
   }
+
+  const manualPlayerOptions = [...rankingPlayers].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div
@@ -2572,6 +2660,49 @@ export default function Page() {
 
       {!loading && activeTab === 'historial' && (
         <div style={{ display: 'grid', gap: 12 }}>
+          {adminUnlocked && (
+            <div
+              style={{
+                background: 'white',
+                borderRadius: 18,
+                padding: 16,
+                border: '1px solid #e5e7eb',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 18 }}>Carga manual de resultados</div>
+                  <div style={{ color: '#64748b', marginTop: 4, fontSize: 14 }}>
+                    Para subir partidos viejos sin crear un turno.
+                  </div>
+                </div>
+
+                <button
+                  onClick={openManualHistoryResultModal}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: '#111827',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Subir resultado manual
+                </button>
+              </div>
+            </div>
+          )}
+
           {matches.length === 0 && (
             <div
               style={{
@@ -2659,9 +2790,43 @@ export default function Page() {
                   </div>
                 )}
 
+                {m.slot_id == null && (
+                  <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
+                    Partido cargado sin turno asociado.
+                  </div>
+                )}
+
                 {m.notes && (
                   <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
                     {m.notes}
+                  </div>
+                )}
+
+                {adminUnlocked && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      marginTop: 12,
+                      paddingTop: 12,
+                      borderTop: '1px solid #e5e7eb',
+                    }}
+                  >
+                    <button
+                      onClick={() => deleteMatchById(m.id)}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 12,
+                        border: 'none',
+                        background: '#b91c1c',
+                        color: 'white',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Borrar resultado
+                    </button>
                   </div>
                 )}
               </div>
@@ -2696,21 +2861,80 @@ export default function Page() {
             }}
           >
             <h3 style={{ marginTop: 0, marginBottom: 12 }}>
-              {resultForm.editingMatchId ? 'Editar resultado' : 'Subir resultado'}
+              {resultForm.editingMatchId
+                ? 'Editar resultado'
+                : resultForm.mode === 'manual'
+                ? 'Subir resultado manual'
+                : 'Subir resultado'}
             </h3>
 
             {(() => {
-              const slot = slotsWithPlayers.find((s) => s.id === resultForm.slotId);
-              const players = slot?.activePlayers || [];
+              const slot =
+                resultForm.mode === 'slot'
+                  ? slotsWithPlayers.find((s) => s.id === resultForm.slotId)
+                  : null;
+
+              const slotModePlayers = slot?.activePlayers || [];
+              const manualPlayers = manualPlayerOptions;
 
               return (
                 <>
                   <div style={{ color: '#64748b', marginBottom: 14 }}>
-                    Turno {slot?.time} · {slot ? formatDate(slot.date) : ''}
+                    {resultForm.mode === 'manual'
+                      ? 'Partido manual sin turno asociado'
+                      : `Turno ${slot?.time} · ${slot ? formatDate(slot.date) : ''}`}
                   </div>
 
                   <div style={{ display: 'grid', gap: 14 }}>
-                    {!resultForm.editingMatchId && (
+                    {resultForm.mode === 'manual' && (
+                      <div
+                        style={{
+                          display: 'grid',
+                          gap: 12,
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700, marginBottom: 8 }}>Fecha</div>
+                          <input
+                            type="date"
+                            value={resultForm.manualDate}
+                            onChange={(e) =>
+                              setResultForm((prev) =>
+                                prev ? { ...prev, manualDate: e.target.value } : prev
+                              )
+                            }
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 12,
+                              border: '1px solid #d1d5db',
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <div style={{ fontWeight: 700, marginBottom: 8 }}>Hora</div>
+                          <input
+                            type="time"
+                            value={resultForm.manualTime}
+                            onChange={(e) =>
+                              setResultForm((prev) =>
+                                prev ? { ...prev, manualTime: e.target.value } : prev
+                              )
+                            }
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 12,
+                              border: '1px solid #d1d5db',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {!resultForm.editingMatchId && resultForm.mode === 'slot' && (
                       <div>
                         <div style={{ fontWeight: 700, marginBottom: 8 }}>
                           Quién carga el resultado
@@ -2736,7 +2960,7 @@ export default function Page() {
                           }}
                         >
                           <option value="">Elegir jugador</option>
-                          {players.map((p) => {
+                          {slotModePlayers.map((p) => {
                             const rankingId = rankingPlayerIdFromSlotPlayerId(
                               p.id,
                               slotPlayers,
@@ -2772,7 +2996,7 @@ export default function Page() {
                           }}
                         >
                           <option value="">Elegir jugador</option>
-                          {players.map((p) => (
+                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.name}
                             </option>
@@ -2795,7 +3019,7 @@ export default function Page() {
                           }}
                         >
                           <option value="">Elegir jugador</option>
-                          {players.map((p) => (
+                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.name}
                             </option>
@@ -2823,7 +3047,7 @@ export default function Page() {
                           }}
                         >
                           <option value="">Elegir jugador</option>
-                          {players.map((p) => (
+                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.name}
                             </option>
@@ -2846,7 +3070,7 @@ export default function Page() {
                           }}
                         >
                           <option value="">Elegir jugador</option>
-                          {players.map((p) => (
+                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.name}
                             </option>
