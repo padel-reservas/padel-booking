@@ -18,7 +18,7 @@ type MatchPayloadInput = {
   set1_a?: number | null;
   set1_b?: number | null;
   set2_a?: number | null;
-  set2_b?: number | number | null;
+  set2_b?: number | null;
   set3_a?: number | null;
   set3_b?: number | null;
   winner_team?: string | null;
@@ -372,18 +372,32 @@ export async function POST(req: Request) {
         return fail('Falta slotId válido.', 400);
       }
 
-      const { data: slotMatch, error: slotMatchError } = await supabase
+      const { data: relatedMatches, error: relatedMatchesError } = await supabase
         .from('matches')
         .select('id')
-        .eq('slot_id', slotId)
-        .limit(1);
+        .eq('slot_id', slotId);
 
-      if (slotMatchError) {
-        return fail(`No se pudo validar si el turno tiene partido: ${slotMatchError.message}`, 400);
+      if (relatedMatchesError) {
+        return fail(
+          `No se pudieron leer los partidos relacionados al turno: ${relatedMatchesError.message}`,
+          400
+        );
       }
 
-      if ((slotMatch || []).length > 0) {
-        return fail('No se puede borrar un turno que ya tiene resultado cargado.', 400);
+      if ((relatedMatches || []).length > 0) {
+        const matchIds = relatedMatches.map((m) => m.id);
+
+        const { error: detachError } = await supabase
+          .from('matches')
+          .update({ slot_id: null })
+          .in('id', matchIds);
+
+        if (detachError) {
+          return fail(
+            `No se pudo desvincular el partido del turno antes de borrar: ${detachError.message}`,
+            400
+          );
+        }
       }
 
       const { error } = await supabase.from('slots').delete().eq('id', slotId);
@@ -392,7 +406,7 @@ export async function POST(req: Request) {
         return fail(error.message, 400);
       }
 
-      return ok();
+      return ok({ mode: 'slot-deleted-kept-matches' });
     }
 
     if (action === 'togglePaid') {
