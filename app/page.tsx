@@ -2775,7 +2775,11 @@ export default function Page() {
                 fontWeight: 700,
               }}
             >
-              {m.source || 'match'}
+             {m.source === 'manual'
+  ? 'Manual'
+  : m.source === 'slot'
+  ? 'Turno'
+  : ''}
             </div>
           </div>
 
