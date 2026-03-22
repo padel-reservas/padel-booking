@@ -74,7 +74,7 @@ type PlayerRatingHistoryPoint = {
   delta: number;
 };
 
-type TabKey = 'turnos' | 'ranking' | 'duelo' | 'historial';
+type TabKey = 'turnos' | 'ranking' | 'duelo' | 'historial' | 'actividad';
 type ResultFormMode = 'slot' | 'manual';
 
 type ResultFormState = {
@@ -112,6 +112,13 @@ type H2HMatch = Match & {
 type PartnershipMatch = Match & {
   teamTogether: 'A' | 'B';
   resultLabel: 'W' | 'L';
+};
+
+type ActivityMatch = Match & {
+  didWin: boolean;
+  partnerName: string;
+  opponent1Name: string;
+  opponent2Name: string;
 };
 
 function todayISO() {
@@ -285,6 +292,7 @@ export default function Page() {
   const [ratingHistory, setRatingHistory] = useState<PlayerRatingHistoryPoint[]>([]);
 
   const [selectedChartPlayer, setSelectedChartPlayer] = useState<string>('');
+  const [selectedActivityPlayer, setSelectedActivityPlayer] = useState<string>('');
   const [duelPlayerA, setDuelPlayerA] = useState<string>('');
   const [duelPlayerB, setDuelPlayerB] = useState<string>('');
 
@@ -353,6 +361,12 @@ export default function Page() {
       return rankingData[0]?.name || '';
     });
 
+    setSelectedActivityPlayer((prev) => {
+      if (prev) return prev;
+      if (myPlayerName) return myPlayerName;
+      return rankingData[0]?.name || '';
+    });
+
     setDuelPlayerA((prev) => prev || myPlayerName || rankingData[0]?.name || '');
     setDuelPlayerB((prev) => {
       if (prev) return prev;
@@ -373,6 +387,7 @@ export default function Page() {
     if (saved) {
       setMyPlayerName(saved);
       setSelectedChartPlayer(saved);
+      setSelectedActivityPlayer(saved);
       setDuelPlayerA(saved);
     }
   }, []);
@@ -380,6 +395,7 @@ export default function Page() {
   function handleSelectMyPlayer(name: string) {
     setMyPlayerName(name);
     setSelectedChartPlayer(name);
+    setSelectedActivityPlayer(name);
     setDuelPlayerA(name);
     window.localStorage.setItem('myPlayerName', name);
   }
@@ -544,6 +560,52 @@ export default function Page() {
       currentStreakText,
     };
   }, [matches, rankingPlayers, duelPlayerA, duelPlayerB]);
+
+  const activityData = useMemo(() => {
+    if (!selectedActivityPlayer) return [] as ActivityMatch[];
+
+    const player = rankingPlayers.find(
+      (p) => p.name.trim().toLowerCase() === selectedActivityPlayer.trim().toLowerCase()
+    );
+
+    if (!player) return [] as ActivityMatch[];
+
+    return matches
+      .filter((m) => {
+        return (
+          m.team_a_player_1_id === player.id ||
+          m.team_a_player_2_id === player.id ||
+          m.team_b_player_1_id === player.id ||
+          m.team_b_player_2_id === player.id
+        );
+      })
+      .map((m) => {
+        const inTeamA =
+          m.team_a_player_1_id === player.id || m.team_a_player_2_id === player.id;
+
+        const partnerId = inTeamA
+          ? m.team_a_player_1_id === player.id
+            ? m.team_a_player_2_id
+            : m.team_a_player_1_id
+          : m.team_b_player_1_id === player.id
+          ? m.team_b_player_2_id
+          : m.team_b_player_1_id;
+
+        const opponent1Id = inTeamA ? m.team_b_player_1_id : m.team_a_player_1_id;
+        const opponent2Id = inTeamA ? m.team_b_player_2_id : m.team_a_player_2_id;
+
+        const didWin =
+          (inTeamA && m.winner_team === 'A') || (!inTeamA && m.winner_team === 'B');
+
+        return {
+          ...m,
+          didWin,
+          partnerName: playerNameById(rankingPlayers, partnerId),
+          opponent1Name: playerNameById(rankingPlayers, opponent1Id),
+          opponent2Name: playerNameById(rankingPlayers, opponent2Id),
+        };
+      });
+  }, [matches, rankingPlayers, selectedActivityPlayer]);
 
   const partnershipData = useMemo(() => {
     if (!duelPlayerA || !duelPlayerB || duelPlayerA === duelPlayerB) {
@@ -1141,6 +1203,7 @@ export default function Page() {
           {tabButton('Ranking', 'ranking')}
           {tabButton('Duelo', 'duelo')}
           {tabButton('Historial', 'historial')}
+          {tabButton('Actividad', 'actividad')}
 
           {canSeeAdmin && activeTab === 'turnos' && (
             <button
@@ -2658,596 +2721,182 @@ export default function Page() {
         </div>
       )}
 
-{!loading && activeTab === 'historial' && (
-  <div style={{ display: 'grid', gap: 12 }}>
-    <div
-      style={{
-        background: 'white',
-        borderRadius: 18,
-        padding: 16,
-        border: '1px solid #e5e7eb',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 12,
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>TEST HISTORIAL MANUAL</div>
-          <div style={{ color: '#64748b', marginTop: 4, fontSize: 14 }}>
-            Para subir partidos viejos sin crear un turno.
-          </div>
-        </div>
-
-        {adminUnlocked ? (
-          <button
-            onClick={openManualHistoryResultModal}
-            style={{
-              padding: '10px 14px',
-              borderRadius: 12,
-              border: 'none',
-              background: '#111827',
-              color: 'white',
-              cursor: 'pointer',
-              fontWeight: 700,
-            }}
-          >
-            Subir resultado manual
-          </button>
-        ) : (
+      {!loading && activeTab === 'historial' && (
+        <div style={{ display: 'grid', gap: 12 }}>
           <div
             style={{
-              padding: '8px 12px',
-              borderRadius: 12,
-              background: '#f8fafc',
+              background: 'white',
+              borderRadius: 18,
+              padding: 16,
               border: '1px solid #e5e7eb',
-              color: '#64748b',
-              fontSize: 13,
-              fontWeight: 700,
             }}
           >
-            Entrá como admin desde Turnos para habilitar esta función
-          </div>
-        )}
-      </div>
-    </div>
-
-    {matches.length === 0 && (
-      <div
-        style={{
-          background: 'white',
-          borderRadius: 20,
-          padding: 20,
-          border: '1px solid #e5e7eb',
-        }}
-      >
-        No hay partidos cargados todavía.
-      </div>
-    )}
-
-    {matches.map((m) => {
-      const teamA = `${playerNameById(rankingPlayers, m.team_a_player_1_id)} / ${playerNameById(
-        rankingPlayers,
-        m.team_a_player_2_id
-      )}`;
-      const teamB = `${playerNameById(rankingPlayers, m.team_b_player_1_id)} / ${playerNameById(
-        rankingPlayers,
-        m.team_b_player_2_id
-      )}`;
-
-      return (
-        <div
-          key={m.id}
-          style={{
-            background: 'white',
-            borderRadius: 18,
-            padding: 16,
-            border: '1px solid #e5e7eb',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: 8,
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              marginBottom: 10,
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: 18 }}>
-              {formatDate(m.match_date)}
-              {m.match_time ? ` · ${m.match_time}` : ''}
-            </div>
-
-            <div
-              style={{
-                padding: '6px 10px',
-                borderRadius: 999,
-                background: '#f1f5f9',
-                border: '1px solid #cbd5e1',
-                fontSize: 12,
-                fontWeight: 700,
-              }}
-            >
-             {m.source === 'manual'
-  ? 'Manual'
-  : m.source === 'slot'
-  ? 'Turno'
-  : ''}
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gap: 6 }}>
-            <div style={{ fontWeight: m.winner_team === 'A' ? 700 : 500 }}>
-              Team A: {teamA}
-            </div>
-            <div style={{ fontWeight: m.winner_team === 'B' ? 700 : 500 }}>
-              Team B: {teamB}
-            </div>
-          </div>
-
-          <div style={{ marginTop: 10, color: '#334155', fontWeight: 700 }}>
-            Resultado: {scoreText(m)}
-          </div>
-
-          {m.winner_team && (
-            <div style={{ marginTop: 6, color: '#64748b', fontSize: 14 }}>
-              Ganador: {m.winner_team === 'A' ? 'Team A' : 'Team B'}
-            </div>
-          )}
-
-          {m.submitted_by_player_id && (
-            <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
-              Cargado por: {playerNameById(rankingPlayers, m.submitted_by_player_id)}
-            </div>
-          )}
-
-          {m.slot_id == null && (
-            <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
-              Partido cargado sin turno asociado.
-            </div>
-          )}
-
-          {m.notes && (
-            <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
-              {m.notes}
-            </div>
-          )}
-
-          {adminUnlocked && (
             <div
               style={{
                 display: 'flex',
-                gap: 8,
+                justifyContent: 'space-between',
+                gap: 12,
+                alignItems: 'center',
                 flexWrap: 'wrap',
-                marginTop: 12,
-                paddingTop: 12,
-                borderTop: '1px solid #e5e7eb',
               }}
             >
-              <button
-                onClick={() => deleteMatchById(m.id)}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: 'none',
-                  background: '#b91c1c',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                }}
-              >
-                Borrar resultado
-              </button>
-            </div>
-          )}
-        </div>
-      );
-    })}
-  </div>
-)}
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 18 }}>Carga manual de resultados</div>
+                <div style={{ color: '#64748b', marginTop: 4, fontSize: 14 }}>
+                  Para subir partidos viejos sin crear un turno.
+                </div>
+              </div>
 
-      {resultModalOpen && resultForm && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15, 23, 42, 0.45)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: 720,
-              background: 'white',
-              borderRadius: 20,
-              padding: 20,
-              border: '1px solid #e5e7eb',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-            }}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: 12 }}>
-              {resultForm.editingMatchId
-                ? 'Editar resultado'
-                : resultForm.mode === 'manual'
-                ? 'Subir resultado manual'
-                : 'Subir resultado'}
-            </h3>
-
-            {(() => {
-              const slot =
-                resultForm.mode === 'slot'
-                  ? slotsWithPlayers.find((s) => s.id === resultForm.slotId)
-                  : null;
-
-              const slotModePlayers = slot?.activePlayers || [];
-              const manualPlayers = manualPlayerOptions;
-
-              return (
-                <>
-                  <div style={{ color: '#64748b', marginBottom: 14 }}>
-                    {resultForm.mode === 'manual'
-                      ? 'Partido manual sin turno asociado'
-                      : `Turno ${slot?.time} · ${slot ? formatDate(slot.date) : ''}`}
-                  </div>
-
-                  <div style={{ display: 'grid', gap: 14 }}>
-                    {resultForm.mode === 'manual' && (
-                      <div
-                        style={{
-                          display: 'grid',
-                          gap: 12,
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 700, marginBottom: 8 }}>Fecha</div>
-                          <input
-                            type="date"
-                            value={resultForm.manualDate}
-                            onChange={(e) =>
-                              setResultForm((prev) =>
-                                prev ? { ...prev, manualDate: e.target.value } : prev
-                              )
-                            }
-                            style={{
-                              width: '100%',
-                              padding: '10px 12px',
-                              borderRadius: 12,
-                              border: '1px solid #d1d5db',
-                            }}
-                          />
-                        </div>
-
-                        <div>
-                          <div style={{ fontWeight: 700, marginBottom: 8 }}>Hora</div>
-                          <input
-                            type="time"
-                            value={resultForm.manualTime}
-                            onChange={(e) =>
-                              setResultForm((prev) =>
-                                prev ? { ...prev, manualTime: e.target.value } : prev
-                              )
-                            }
-                            style={{
-                              width: '100%',
-                              padding: '10px 12px',
-                              borderRadius: 12,
-                              border: '1px solid #d1d5db',
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {!resultForm.editingMatchId && resultForm.mode === 'slot' && (
-                      <div>
-                        <div style={{ fontWeight: 700, marginBottom: 8 }}>
-                          Quién carga el resultado
-                        </div>
-                        <select
-                          value={resultForm.submittedByPlayerId}
-                          onChange={(e) =>
-                            setResultForm((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    submittedByPlayerId:
-                                      e.target.value === '' ? '' : Number(e.target.value),
-                                  }
-                                : prev
-                            )
-                          }
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                            width: '100%',
-                          }}
-                        >
-                          <option value="">Elegir jugador</option>
-                          {slotModePlayers.map((p) => {
-                            const rankingId = rankingPlayerIdFromSlotPlayerId(
-                              p.id,
-                              slotPlayers,
-                              rankingPlayers
-                            );
-                            if (!rankingId) return null;
-                            return (
-                              <option key={p.id} value={rankingId}>
-                                {p.name}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-                    )}
-
-                    <div>
-                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Pareja A</div>
-                      <div style={{ display: 'grid', gap: 8 }}>
-                        <select
-                          value={resultForm.teamA1}
-                          onChange={(e) =>
-                            setResultForm((prev) =>
-                              prev
-                                ? { ...prev, teamA1: e.target.value === '' ? '' : Number(e.target.value) }
-                                : prev
-                            )
-                          }
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                          }}
-                        >
-                          <option value="">Elegir jugador</option>
-                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-
-                        <select
-                          value={resultForm.teamA2}
-                          onChange={(e) =>
-                            setResultForm((prev) =>
-                              prev
-                                ? { ...prev, teamA2: e.target.value === '' ? '' : Number(e.target.value) }
-                                : prev
-                            )
-                          }
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                          }}
-                        >
-                          <option value="">Elegir jugador</option>
-                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Pareja B</div>
-                      <div style={{ display: 'grid', gap: 8 }}>
-                        <select
-                          value={resultForm.teamB1}
-                          onChange={(e) =>
-                            setResultForm((prev) =>
-                              prev
-                                ? { ...prev, teamB1: e.target.value === '' ? '' : Number(e.target.value) }
-                                : prev
-                            )
-                          }
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                          }}
-                        >
-                          <option value="">Elegir jugador</option>
-                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-
-                        <select
-                          value={resultForm.teamB2}
-                          onChange={(e) =>
-                            setResultForm((prev) =>
-                              prev
-                                ? { ...prev, teamB2: e.target.value === '' ? '' : Number(e.target.value) }
-                                : prev
-                            )
-                          }
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                          }}
-                        >
-                          <option value="">Elegir jugador</option>
-                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Resultado por sets</div>
-                      <div
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 80px 80px',
-                          gap: 8,
-                          alignItems: 'center',
-                        }}
-                      >
-                        <div>Set 1</div>
-                        <input
-                          value={resultForm.set1A}
-                          onChange={(e) =>
-                            setResultForm((prev) => (prev ? { ...prev, set1A: e.target.value } : prev))
-                          }
-                          placeholder="A"
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                          }}
-                        />
-                        <input
-                          value={resultForm.set1B}
-                          onChange={(e) =>
-                            setResultForm((prev) => (prev ? { ...prev, set1B: e.target.value } : prev))
-                          }
-                          placeholder="B"
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                          }}
-                        />
-
-                        <div>Set 2</div>
-                        <input
-                          value={resultForm.set2A}
-                          onChange={(e) =>
-                            setResultForm((prev) => (prev ? { ...prev, set2A: e.target.value } : prev))
-                          }
-                          placeholder="A"
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                          }}
-                        />
-                        <input
-                          value={resultForm.set2B}
-                          onChange={(e) =>
-                            setResultForm((prev) => (prev ? { ...prev, set2B: e.target.value } : prev))
-                          }
-                          placeholder="B"
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                          }}
-                        />
-
-                        <div>Set 3</div>
-                        <input
-                          value={resultForm.set3A}
-                          onChange={(e) =>
-                            setResultForm((prev) => (prev ? { ...prev, set3A: e.target.value } : prev))
-                          }
-                          placeholder="A"
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                          }}
-                        />
-                        <input
-                          value={resultForm.set3B}
-                          onChange={(e) =>
-                            setResultForm((prev) => (prev ? { ...prev, set3B: e.target.value } : prev))
-                          }
-                          placeholder="B"
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: '1px solid #d1d5db',
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Notas</div>
-                      <textarea
-                        value={resultForm.notes}
-                        onChange={(e) =>
-                          setResultForm((prev) => (prev ? { ...prev, notes: e.target.value } : prev))
-                        }
-                        rows={3}
-                        placeholder="Opcional"
-                        style={{
-                          width: '100%',
-                          padding: '10px 12px',
-                          borderRadius: 12,
-                          border: '1px solid #d1d5db',
-                          resize: 'vertical',
-                        }}
-                      />
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
-
-            <div style={{ display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
-              <button
-                onClick={closeResultModal}
-                disabled={savingResult}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: '1px solid #d1d5db',
-                  background: 'white',
-                  cursor: savingResult ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Cancelar
-              </button>
-
-              <button
-                onClick={saveResult}
-                disabled={savingResult}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: 'none',
-                  background: '#111827',
-                  color: 'white',
-                  cursor: savingResult ? 'not-allowed' : 'pointer',
-                  fontWeight: 700,
-                }}
-              >
-                {savingResult
-                  ? 'Guardando...'
-                  : resultForm.editingMatchId
-                  ? 'Guardar cambios'
-                  : 'Guardar resultado'}
-              </button>
+              {adminUnlocked ? (
+                <button
+                  onClick={openManualHistoryResultModal}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: '#111827',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Subir resultado manual
+                </button>
+              ) : (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 12,
+                    background: '#f8fafc',
+                    border: '1px solid #e5e7eb',
+                    color: '#64748b',
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  Entrá como admin desde Turnos para habilitar esta función
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
+
+          {matches.length === 0 && (
+            <div
+              style={{
+                background: 'white',
+                borderRadius: 20,
+                padding: 20,
+                border: '1px solid #e5e7eb',
+              }}
+            >
+              No hay partidos cargados todavía.
+            </div>
+          )}
+
+          {matches.map((m) => {
+            const teamA = `${playerNameById(rankingPlayers, m.team_a_player_1_id)} / ${playerNameById(
+              rankingPlayers,
+              m.team_a_player_2_id
+            )}`;
+            const teamB = `${playerNameById(rankingPlayers, m.team_b_player_1_id)} / ${playerNameById(
+              rankingPlayers,
+              m.team_b_player_2_id
+            )}`;
+
+            return (
+              <div
+                key={m.id}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: 16,
+                  border: '1px solid #e5e7eb',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    marginBottom: 10,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 18 }}>
+                    {formatDate(m.match_date)}
+                    {m.match_time ? ` · ${m.match_time}` : ''}
+                  </div>
+
+                  {m.source && (
+                    <div
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 999,
+                        background: '#f1f5f9',
+                        border: '1px solid #cbd5e1',
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {m.source === 'manual'
+                        ? 'Manual'
+                        : m.source === 'slot'
+                        ? 'Turno'
+                        : ''}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <div style={{ fontWeight: m.winner_team === 'A' ? 700 : 500 }}>
+                    Team A: {teamA}
+                  </div>
+                  <div style={{ fontWeight: m.winner_team === 'B' ? 700 : 500 }}>
+                    Team B: {teamB}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 10, color: '#334155', fontWeight: 700 }}>
+                  Resultado: {scoreText(m)}
+                </div>
+
+                {m.winner_team && (
+                  <div style={{ marginTop: 6, color: '#64748b', fontSize: 14 }}>
+                    Ganador: {m.winner_team === 'A' ? 'Team A' : 'Team B'}
+                  </div>
+                )}
+
+                {m.submitted_by_player_id && (
+                  <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
+                    Cargado por: {playerNameById(rankingPlayers, m.submitted_by_player_id)}
+                  </div>
+                )}
+
+                {m.slot_id == null && (
+                  <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
+                    Partido cargado sin turno asociado.
+                  </div>
+                )}
+
+                {m.notes && (
+                  <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
+                    {m.notes}
+                  </div>
+                )}
+
+                {adminUnlocked && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      marginTop: 12,
+                      paddingTop: 12,
+                      borderTop: '1px solid #e5e7eb',
+                    }}
+                  >
+                    <button
+                      onClick={() => deleteMatchById(m.id)}
+                      style={{
+                        padding
