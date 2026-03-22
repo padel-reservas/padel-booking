@@ -562,13 +562,13 @@ export default function Page() {
   }, [matches, rankingPlayers, duelPlayerA, duelPlayerB]);
 
   const activityData = useMemo(() => {
-    if (!selectedActivityPlayer) return [] as ActivityMatch[];
+    if (!selectedActivityPlayer) return [];
 
     const player = rankingPlayers.find(
       (p) => p.name.trim().toLowerCase() === selectedActivityPlayer.trim().toLowerCase()
     );
 
-    if (!player) return [] as ActivityMatch[];
+    if (!player) return [];
 
     return matches
       .filter((m) => {
@@ -603,7 +603,7 @@ export default function Page() {
           partnerName: playerNameById(rankingPlayers, partnerId),
           opponent1Name: playerNameById(rankingPlayers, opponent1Id),
           opponent2Name: playerNameById(rankingPlayers, opponent2Id),
-        };
+        } as ActivityMatch;
       });
   }, [matches, rankingPlayers, selectedActivityPlayer]);
 
@@ -2899,4 +2899,549 @@ export default function Page() {
                     <button
                       onClick={() => deleteMatchById(m.id)}
                       style={{
-                        padding
+                        padding: '10px 14px',
+                        borderRadius: 12,
+                        border: 'none',
+                        background: '#b91c1c',
+                        color: 'white',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Borrar resultado
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!loading && activeTab === 'actividad' && (
+        <div
+          style={{
+            background: 'white',
+            borderRadius: 24,
+            padding: 24,
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)',
+          }}
+        >
+          <div style={{ marginBottom: 18 }}>
+            <h2 style={{ margin: 0, fontSize: 24 }}>Actividad</h2>
+            <div style={{ marginTop: 6, color: '#64748b', fontSize: 14 }}>
+              Historial completo de partidos por jugador.
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              marginBottom: 18,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>Jugador</div>
+
+            <select
+              value={selectedActivityPlayer}
+              onChange={(e) => setSelectedActivityPlayer(e.target.value)}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 12,
+                border: '1px solid #d1d5db',
+                background: 'white',
+                minWidth: 240,
+              }}
+            >
+              <option value="">Elegir jugador</option>
+              {[...rankingPlayers]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {selectedActivityPlayer && activityData.length === 0 && (
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 14,
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                color: '#64748b',
+              }}
+            >
+              No hay partidos cargados para ese jugador.
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gap: 12 }}>
+            {activityData.map((m) => (
+              <div
+                key={`activity-${m.id}`}
+                style={{
+                  background: '#fcfcfd',
+                  borderRadius: 18,
+                  padding: 16,
+                  border: '1px solid #e5e7eb',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    marginBottom: 10,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 18 }}>
+                    {formatDate(m.match_date)}
+                    {m.match_time ? ` · ${m.match_time}` : ''}
+                  </div>
+
+                  <div
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 999,
+                      background: m.didWin ? '#ecfdf5' : '#fef2f2',
+                      border: `1px solid ${m.didWin ? '#bbf7d0' : '#fecaca'}`,
+                      color: m.didWin ? '#166534' : '#b91c1c',
+                      fontSize: 12,
+                      fontWeight: 800,
+                    }}
+                  >
+                    {m.didWin ? 'Victoria' : 'Derrota'}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <div style={{ color: '#334155' }}>
+                    <strong>Compañero:</strong> {m.partnerName}
+                  </div>
+                  <div style={{ color: '#334155' }}>
+                    <strong>Rivales:</strong> {m.opponent1Name} / {m.opponent2Name}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 10, color: '#334155', fontWeight: 700 }}>
+                  Resultado: {scoreText(m)}
+                </div>
+
+                {m.notes && (
+                  <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
+                    {m.notes}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {resultModalOpen && resultForm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 720,
+              background: 'white',
+              borderRadius: 20,
+              padding: 20,
+              border: '1px solid #e5e7eb',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <h3 style={{ marginTop: 0, marginBottom: 12 }}>
+              {resultForm.editingMatchId
+                ? 'Editar resultado'
+                : resultForm.mode === 'manual'
+                ? 'Subir resultado manual'
+                : 'Subir resultado'}
+            </h3>
+
+            {(() => {
+              const slot =
+                resultForm.mode === 'slot'
+                  ? slotsWithPlayers.find((s) => s.id === resultForm.slotId)
+                  : null;
+
+              const slotModePlayers = slot?.activePlayers || [];
+              const manualPlayers = manualPlayerOptions;
+
+              return (
+                <>
+                  <div style={{ color: '#64748b', marginBottom: 14 }}>
+                    {resultForm.mode === 'manual'
+                      ? 'Partido manual sin turno asociado'
+                      : `Turno ${slot?.time} · ${slot ? formatDate(slot.date) : ''}`}
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    {resultForm.mode === 'manual' && (
+                      <div
+                        style={{
+                          display: 'grid',
+                          gap: 12,
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700, marginBottom: 8 }}>Fecha</div>
+                          <input
+                            type="date"
+                            value={resultForm.manualDate}
+                            onChange={(e) =>
+                              setResultForm((prev) =>
+                                prev ? { ...prev, manualDate: e.target.value } : prev
+                              )
+                            }
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 12,
+                              border: '1px solid #d1d5db',
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <div style={{ fontWeight: 700, marginBottom: 8 }}>Hora</div>
+                          <input
+                            type="time"
+                            value={resultForm.manualTime}
+                            onChange={(e) =>
+                              setResultForm((prev) =>
+                                prev ? { ...prev, manualTime: e.target.value } : prev
+                              )
+                            }
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 12,
+                              border: '1px solid #d1d5db',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {!resultForm.editingMatchId && resultForm.mode === 'slot' && (
+                      <div>
+                        <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                          Quién carga el resultado
+                        </div>
+                        <select
+                          value={resultForm.submittedByPlayerId}
+                          onChange={(e) =>
+                            setResultForm((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    submittedByPlayerId:
+                                      e.target.value === '' ? '' : Number(e.target.value),
+                                  }
+                                : prev
+                            )
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                            width: '100%',
+                          }}
+                        >
+                          <option value="">Elegir jugador</option>
+                          {slotModePlayers.map((p) => {
+                            const rankingId = rankingPlayerIdFromSlotPlayerId(
+                              p.id,
+                              slotPlayers,
+                              rankingPlayers
+                            );
+                            if (!rankingId) return null;
+                            return (
+                              <option key={p.id} value={rankingId}>
+                                {p.name}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Pareja A</div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <select
+                          value={resultForm.teamA1}
+                          onChange={(e) =>
+                            setResultForm((prev) =>
+                              prev
+                                ? { ...prev, teamA1: e.target.value === '' ? '' : Number(e.target.value) }
+                                : prev
+                            )
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        >
+                          <option value="">Elegir jugador</option>
+                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={resultForm.teamA2}
+                          onChange={(e) =>
+                            setResultForm((prev) =>
+                              prev
+                                ? { ...prev, teamA2: e.target.value === '' ? '' : Number(e.target.value) }
+                                : prev
+                            )
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        >
+                          <option value="">Elegir jugador</option>
+                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Pareja B</div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <select
+                          value={resultForm.teamB1}
+                          onChange={(e) =>
+                            setResultForm((prev) =>
+                              prev
+                                ? { ...prev, teamB1: e.target.value === '' ? '' : Number(e.target.value) }
+                                : prev
+                            )
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        >
+                          <option value="">Elegir jugador</option>
+                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={resultForm.teamB2}
+                          onChange={(e) =>
+                            setResultForm((prev) =>
+                              prev
+                                ? { ...prev, teamB2: e.target.value === '' ? '' : Number(e.target.value) }
+                                : prev
+                            )
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        >
+                          <option value="">Elegir jugador</option>
+                          {(resultForm.mode === 'manual' ? manualPlayers : slotModePlayers).map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Resultado por sets</div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 80px 80px',
+                          gap: 8,
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div>Set 1</div>
+                        <input
+                          value={resultForm.set1A}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set1A: e.target.value } : prev))
+                          }
+                          placeholder="A"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+                        <input
+                          value={resultForm.set1B}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set1B: e.target.value } : prev))
+                          }
+                          placeholder="B"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+
+                        <div>Set 2</div>
+                        <input
+                          value={resultForm.set2A}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set2A: e.target.value } : prev))
+                          }
+                          placeholder="A"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+                        <input
+                          value={resultForm.set2B}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set2B: e.target.value } : prev))
+                          }
+                          placeholder="B"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+
+                        <div>Set 3</div>
+                        <input
+                          value={resultForm.set3A}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set3A: e.target.value } : prev))
+                          }
+                          placeholder="A"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+                        <input
+                          value={resultForm.set3B}
+                          onChange={(e) =>
+                            setResultForm((prev) => (prev ? { ...prev, set3B: e.target.value } : prev))
+                          }
+                          placeholder="B"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Notas</div>
+                      <textarea
+                        value={resultForm.notes}
+                        onChange={(e) =>
+                          setResultForm((prev) => (prev ? { ...prev, notes: e.target.value } : prev))
+                        }
+                        rows={3}
+                        placeholder="Opcional"
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          border: '1px solid #d1d5db',
+                          resize: 'vertical',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
+              <button
+                onClick={closeResultModal}
+                disabled={savingResult}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid #d1d5db',
+                  background: 'white',
+                  cursor: savingResult ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={saveResult}
+                disabled={savingResult}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: '#111827',
+                  color: 'white',
+                  cursor: savingResult ? 'not-allowed' : 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                {savingResult
+                  ? 'Guardando...'
+                  : resultForm.editingMatchId
+                  ? 'Guardar cambios'
+                  : 'Guardar resultado'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
