@@ -12,7 +12,6 @@ import ResultModal from './components/ResultModal';
 
 import type {
   ActivityMatch,
-  ChartPoint,
   H2HMatch,
   Match,
   PartnershipMatch,
@@ -21,17 +20,18 @@ import type {
   ResultFormState,
   Slot,
   SlotPlayer,
+  SlotPlayerWithPaymentUI,
   TabKey,
+  Payment,
+  PaymentAllocationWithPayment,
 } from './lib/padelTypes';
 
 import {
   buildPointsChartGeometry,
   computeWinnerTeam,
-  formatDate,
   parseSetValue,
   playerNameById,
   rankingPlayerIdFromSlotPlayerId,
-  scoreText,
   sortPlayers,
   statsMap,
   todayISO,
@@ -44,6 +44,67 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+type SlotWithPlayers = Slot & {
+  allPlayers: SlotPlayerWithPaymentUI[];
+  activePlayers: SlotPlayerWithPaymentUI[];
+  waitlistPlayers: SlotPlayerWithPaymentUI[];
+  match: Match | null;
+};
+
+function getLatestPaymentByStatus(
+  player: SlotPlayer,
+  status: 'reported' | 'verified'
+): Payment | null {
+  const allocations = player.payment_allocations || [];
+
+  const payments = allocations
+    .map((allocation) => allocation.payment || null)
+    .filter((payment): payment is Payment => Boolean(payment))
+    .filter((payment) => payment.status === status)
+    .sort((a, b) => {
+      const aTime =
+        status === 'verified'
+          ? new Date(a.verified_at || a.reported_at).getTime()
+          : new Date(a.reported_at).getTime();
+      const bTime =
+        status === 'verified'
+          ? new Date(b.verified_at || b.reported_at).getTime()
+          : new Date(b.reported_at).getTime();
+      return bTime - aTime;
+    });
+
+  return payments[0] || null;
+}
+
+function enrichPlayerPaymentUI(
+  player: SlotPlayer,
+  allPlayers: SlotPlayer[]
+): SlotPlayerWithPaymentUI {
+  const latestVerifiedPayment = getLatestPaymentByStatus(player, 'verified');
+  const latestReportedPayment = getLatestPaymentByStatus(player, 'reported');
+
+  const paymentVisualStatus = player.paid
+    ? 'paid'
+    : latestReportedPayment
+    ? 'reported'
+    : 'unpaid';
+
+  const sourcePayment = latestVerifiedPayment || latestReportedPayment || null;
+  const paidByPlayerId = sourcePayment?.payer_player_id ?? null;
+  const paidByPlayerName =
+    paidByPlayerId != null
+      ? allPlayers.find((p) => p.id === paidByPlayerId)?.name || null
+      : null;
+
+  return {
+    ...player,
+    paymentVisualStatus,
+    latestReportedPayment,
+    latestVerifiedPayment,
+    paidByPlayerId,
+    paidByPlayerName,
+  };
+}
 
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabKey>('turnos');
@@ -84,14 +145,40 @@ export default function Page() {
     setLoading(true);
 
     const [
-      { data: slotsData },
-      { data: slotPlayersData },
-      { data: rankingPlayersData },
-      { data: matchesData },
-      { data: ratingHistoryData },
+      { data: slotsData, error: slotsError },
+      { data: slotPlayersData, error: slotPlayersError },
+      { data: rankingPlayersData, error: rankingPlayersError },
+      { data: matchesData, error: matchesError },
+      { data: ratingHistoryData, error: ratingHistoryError },
     ] = await Promise.all([
       supabase.from('slots').select('*').order('date').order('time'),
-      supabase.from('players').select('*').order('created_at', { ascending: true }),
+      supabase
+        .from('players')
+        .select(
+          `
+            *,
+            payment_allocations (
+              id,
+              payment_id,
+              player_id,
+              created_at,
+              payment:payments (
+                id,
+                payer_player_id,
+                payment_method,
+                status,
+                amount,
+                notes,
+                reported_at,
+                verified_at,
+                verified_by,
+                created_at,
+                updated_at
+              )
+            )
+          `
+        )
+        .order('created_at', { ascending: true }),
       supabase
         .from('ranking_players')
         .select('*')
@@ -110,10 +197,28 @@ export default function Page() {
         .order('match_id', { ascending: true }),
     ]);
 
+    const firstError =
+      slotsError ||
+      slotPlayersError ||
+      rankingPlayersError ||
+      matchesError ||
+      ratingHistoryError;
+
+    if (firstError) {
+      alert(`Error cargando datos: ${firstError.message}`);
+      setLoading(false);
+      return;
+    }
+
     const rankingData = (rankingPlayersData || []) as RankingPlayer[];
 
+    const playersWithPayments = ((slotPlayersData || []) as SlotPlayer[]).map((player) => ({
+      ...player,
+      payment_allocations: (player.payment_allocations || []) as PaymentAllocationWithPayment[],
+    }));
+
     setSlots((slotsData || []) as Slot[]);
-    setSlotPlayers((slotPlayersData || []) as SlotPlayer[]);
+    setSlotPlayers(playersWithPayments);
     setRankingPlayers(rankingData);
     setMatches((matchesData || []) as Match[]);
     setRatingHistory((ratingHistoryData || []) as PlayerRatingHistoryPoint[]);
@@ -466,23 +571,26 @@ export default function Page() {
     return map;
   }, [matches]);
 
-  const slotsWithPlayers = useMemo(() => {
+  const slotsWithPlayers = useMemo<SlotWithPlayers[]>(() => {
     return slots.map((s) => {
-      const allPlayers = sortPlayers(slotPlayers.filter((p) => p.slot_id === s.id));
+      const basePlayers = sortPlayers(slotPlayers.filter((p) => p.slot_id === s.id));
+      const enrichedPlayers = basePlayers.map((player) =>
+        enrichPlayerPaymentUI(player, basePlayers)
+      );
       const match = slotMatchMap.get(s.id) || null;
 
       return {
         ...s,
-        allPlayers,
-        activePlayers: allPlayers.slice(0, MAX_PLAYERS),
-        waitlistPlayers: allPlayers.slice(MAX_PLAYERS),
+        allPlayers: enrichedPlayers,
+        activePlayers: enrichedPlayers.slice(0, MAX_PLAYERS),
+        waitlistPlayers: enrichedPlayers.slice(MAX_PLAYERS),
         match,
       };
     });
   }, [slots, slotPlayers, slotMatchMap]);
 
   const groupedSlots = useMemo(() => {
-    const grouped: Record<string, typeof slotsWithPlayers> = {};
+    const grouped: Record<string, SlotWithPlayers[]> = {};
     for (const slot of slotsWithPlayers) {
       if (!grouped[slot.date]) grouped[slot.date] = [];
       grouped[slot.date].push(slot);
@@ -1161,69 +1269,68 @@ export default function Page() {
       )}
 
       {!loading && activeTab === 'turnos' && (
-  <TurnosTab
-    groupedSlots={groupedSlots}
-    rankingPlayers={rankingPlayers}
-    rankingStats={rankingStats}
-    nameInput={nameInput}
-    setNameInput={setNameInput}
-    adminUnlocked={adminUnlocked}
-    adminAction={adminAction}
-    loadData={loadData}
-    addPlayer={addPlayer}
-    removePlayer={removePlayer}
-    openNewResultModal={openNewResultModal}
-    openEditResultModal={openEditResultModal}
-    deleteResult={deleteResult}
-  />
-)}
-      
-     
-{!loading && activeTab === 'ranking' && (
-  <RankingTab
-    rankingPlayers={rankingPlayers}
-    myPlayerName={myPlayerName}
-    handleSelectMyPlayer={handleSelectMyPlayer}
-    clearMyPlayer={clearMyPlayer}
-    myRankingSummary={myRankingSummary}
-    chartPlayerName={chartPlayerName}
-    setSelectedChartPlayer={setSelectedChartPlayer}
-    chartStats={chartStats}
-    chartGeometry={chartGeometry}
-  />
-)}
-      
-{!loading && activeTab === 'duelo' && (
-  <DuelTab
-    rankingPlayers={rankingPlayers}
-    duelPlayerA={duelPlayerA}
-    duelPlayerB={duelPlayerB}
-    setDuelPlayerA={setDuelPlayerA}
-    setDuelPlayerB={setDuelPlayerB}
-    h2hData={h2hData}
-    partnershipData={partnershipData}
-  />
-)}
-      
+        <TurnosTab
+          groupedSlots={groupedSlots}
+          rankingPlayers={rankingPlayers}
+          rankingStats={rankingStats}
+          nameInput={nameInput}
+          setNameInput={setNameInput}
+          adminUnlocked={adminUnlocked}
+          adminAction={adminAction}
+          loadData={loadData}
+          addPlayer={addPlayer}
+          removePlayer={removePlayer}
+          openNewResultModal={openNewResultModal}
+          openEditResultModal={openEditResultModal}
+          deleteResult={deleteResult}
+        />
+      )}
+
+      {!loading && activeTab === 'ranking' && (
+        <RankingTab
+          rankingPlayers={rankingPlayers}
+          myPlayerName={myPlayerName}
+          handleSelectMyPlayer={handleSelectMyPlayer}
+          clearMyPlayer={clearMyPlayer}
+          myRankingSummary={myRankingSummary}
+          chartPlayerName={chartPlayerName}
+          setSelectedChartPlayer={setSelectedChartPlayer}
+          chartStats={chartStats}
+          chartGeometry={chartGeometry}
+        />
+      )}
+
+      {!loading && activeTab === 'duelo' && (
+        <DuelTab
+          rankingPlayers={rankingPlayers}
+          duelPlayerA={duelPlayerA}
+          duelPlayerB={duelPlayerB}
+          setDuelPlayerA={setDuelPlayerA}
+          setDuelPlayerB={setDuelPlayerB}
+          h2hData={h2hData}
+          partnershipData={partnershipData}
+        />
+      )}
+
       {!loading && activeTab === 'historial' && (
-  <HistoryTab
-    matches={matches}
-    rankingPlayers={rankingPlayers}
-    adminUnlocked={adminUnlocked}
-    openManualHistoryResultModal={openManualHistoryResultModal}
-    deleteMatchById={deleteMatchById}
-  />
-)}
-      
-{!loading && activeTab === 'actividad' && (
-  <ActivityTab
-    rankingPlayers={rankingPlayers}
-    selectedActivityPlayer={selectedActivityPlayer}
-    setSelectedActivityPlayer={setSelectedActivityPlayer}
-    activityData={activityData}
-  />
-)}
-      
+        <HistoryTab
+          matches={matches}
+          rankingPlayers={rankingPlayers}
+          adminUnlocked={adminUnlocked}
+          openManualHistoryResultModal={openManualHistoryResultModal}
+          deleteMatchById={deleteMatchById}
+        />
+      )}
+
+      {!loading && activeTab === 'actividad' && (
+        <ActivityTab
+          rankingPlayers={rankingPlayers}
+          selectedActivityPlayer={selectedActivityPlayer}
+          setSelectedActivityPlayer={setSelectedActivityPlayer}
+          activityData={activityData}
+        />
+      )}
+
       <ResultModal
         resultModalOpen={resultModalOpen}
         resultForm={resultForm}
@@ -1240,4 +1347,3 @@ export default function Page() {
     </div>
   );
 }
-     
