@@ -465,18 +465,20 @@ export default function TurnosTab({
                               </div>
 
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                <button
-                                  onClick={() => openReportPaymentModal(slot.id, p.id)}
-                                  style={{
-                                    padding: '8px 10px',
-                                    borderRadius: 10,
-                                    border: '1px solid #d1d5db',
-                                    background: 'white',
-                                    cursor: 'pointer',
-                                  }}
-                                >
-                                  Report Payment
-                                </button>
+                                {p.paymentVisualStatus === 'unpaid' && (
+                                  <button
+                                    onClick={() => openReportPaymentModal(slot.id, p.id)}
+                                    style={{
+                                      padding: '8px 10px',
+                                      borderRadius: 10,
+                                      border: '1px solid #d1d5db',
+                                      background: 'white',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    Report Payment
+                                  </button>
+                                )}
 
                                 <button
                                   onClick={() => removePlayer(p.id)}
@@ -608,18 +610,20 @@ export default function TurnosTab({
                               </div>
 
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                <button
-                                  onClick={() => openReportPaymentModal(slot.id, p.id)}
-                                  style={{
-                                    padding: '8px 10px',
-                                    borderRadius: 10,
-                                    border: '1px solid #d1d5db',
-                                    background: 'white',
-                                    cursor: 'pointer',
-                                  }}
-                                >
-                                  Report Payment
-                                </button>
+                                {p.paymentVisualStatus === 'unpaid' && (
+                                  <button
+                                    onClick={() => openReportPaymentModal(slot.id, p.id)}
+                                    style={{
+                                      padding: '8px 10px',
+                                      borderRadius: 10,
+                                      border: '1px solid #d1d5db',
+                                      background: 'white',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    Report Payment
+                                  </button>
+                                )}
 
                                 <button
                                   onClick={() => removePlayer(p.id)}
