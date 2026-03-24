@@ -43,6 +43,8 @@ type Props = {
   openEditResultModal: (slotId: number) => void;
   deleteResult: (slotId: number) => Promise<void>;
   openReportPaymentModal: (slotId: number, defaultPayerPlayerId?: number) => void;
+  approvePayment: (paymentId: string) => Promise<void>;
+  rejectPayment: (paymentId: string) => Promise<void>;
 };
 
 function getPaymentBadge(player: SlotPlayerWithPaymentUI) {
@@ -138,6 +140,8 @@ export default function TurnosTab({
   openEditResultModal,
   deleteResult,
   openReportPaymentModal,
+  approvePayment,
+  rejectPayment,
 }: Props) {
   return (
     <>
@@ -474,44 +478,6 @@ export default function TurnosTab({
                                   Report Payment
                                 </button>
 
-                                {adminUnlocked && p.paymentVisualStatus === 'reported' && (
-                                  <>
-                                    <button
-                                      onClick={() => {
-                                        alert('Próximo paso: approve payment');
-                                      }}
-                                      style={{
-                                        padding: '8px 10px',
-                                        borderRadius: 10,
-                                        border: 'none',
-                                        background: '#166534',
-                                        color: 'white',
-                                        cursor: 'pointer',
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      Approve
-                                    </button>
-
-                                    <button
-                                      onClick={() => {
-                                        alert('Próximo paso: reject payment');
-                                      }}
-                                      style={{
-                                        padding: '8px 10px',
-                                        borderRadius: 10,
-                                        border: 'none',
-                                        background: '#b45309',
-                                        color: 'white',
-                                        cursor: 'pointer',
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      Reject
-                                    </button>
-                                  </>
-                                )}
-
                                 <button
                                   onClick={() => removePlayer(p.id)}
                                   style={{
@@ -725,9 +691,7 @@ export default function TurnosTab({
 
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                 <button
-                                  onClick={() => {
-                                    alert('Próximo paso: approve payment');
-                                  }}
+                                  onClick={() => approvePayment(payment.id)}
                                   style={{
                                     padding: '8px 10px',
                                     borderRadius: 10,
@@ -742,9 +706,7 @@ export default function TurnosTab({
                                 </button>
 
                                 <button
-                                  onClick={() => {
-                                    alert('Próximo paso: reject payment');
-                                  }}
+                                  onClick={() => rejectPayment(payment.id)}
                                   style={{
                                     padding: '8px 10px',
                                     borderRadius: 10,
