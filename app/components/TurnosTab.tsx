@@ -278,7 +278,7 @@ export default function TurnosTab({
                             fontWeight: 700,
                           }}
                         >
-                          WhatsApp Reminder
+                          Copy WhatsApp Reminder
                         </button>
                       )}
 
