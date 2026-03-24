@@ -938,6 +938,40 @@ export default function Page() {
     await loadData();
   }
 
+  async function sendWhatsAppReminder(slotId: number) {
+    const slot = slotsWithPlayers.find((s) => s.id === slotId);
+    if (!slot) return;
+
+    const unpaidPlayers = slot.allPlayers.filter((p) => p.paymentVisualStatus === 'unpaid');
+
+    if (unpaidPlayers.length === 0) {
+      alert('No hay jugadores unpaid para recordar en este turno.');
+      return;
+    }
+
+    const pendingNames = unpaidPlayers.map((p) => p.name).join(', ');
+    const message =
+      `Chicos, recordatorio de pago del turno de pádel del ${slot.date} a las ${slot.time}. ` +
+      `Pendientes: ${pendingNames}. ` +
+      `Por favor envíenlo por Venmo o Zelle. Gracias.`;
+
+    for (const player of unpaidPlayers) {
+      const { error } = await supabase.rpc('record_player_payment_reminder', {
+        p_player_id: player.id,
+      });
+
+      if (error) {
+        alert(`No se pudo registrar el reminder para ${player.name}: ${error.message}`);
+        return;
+      }
+    }
+
+    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+
+    await loadData();
+  }
+
   async function saveResult() {
     if (!resultForm) return;
 
@@ -1444,6 +1478,7 @@ export default function Page() {
           openReportPaymentModal={openReportPaymentModal}
           approvePayment={approvePayment}
           rejectPayment={rejectPayment}
+          sendWhatsAppReminder={sendWhatsAppReminder}
         />
       )}
 
