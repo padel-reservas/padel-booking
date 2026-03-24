@@ -1224,17 +1224,20 @@ export default function Page() {
   />
 )}
       
-
       <ResultModal
-  resultModalOpen={resultModalOpen}
-  resultForm={resultForm}
-  savingResult={savingResult}
-  slotsWithPlayers={slotsWithPlayers}
-  slotPlayers={slotPlayers}
-  rankingPlayers={rankingPlayers}
-  manualPlayerOptions={manualPlayerOptions}
-  rankingPlayerIdFromSlotPlayerId={rankingPlayerIdFromSlotPlayerId}
-  setResultForm={setResultForm}
-  closeResultModal={closeResultModal}
-  saveResult={saveResult}
-/>
+        resultModalOpen={resultModalOpen}
+        resultForm={resultForm}
+        savingResult={savingResult}
+        slotsWithPlayers={slotsWithPlayers}
+        slotPlayers={slotPlayers}
+        rankingPlayers={rankingPlayers}
+        manualPlayerOptions={manualPlayerOptions}
+        rankingPlayerIdFromSlotPlayerId={rankingPlayerIdFromSlotPlayerId}
+        setResultForm={setResultForm}
+        closeResultModal={closeResultModal}
+        saveResult={saveResult}
+      />
+    </div>
+  );
+}
+     
