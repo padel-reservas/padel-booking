@@ -3,6 +3,33 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
+import type {
+  ActivityMatch,
+  ChartPoint,
+  H2HMatch,
+  Match,
+  PartnershipMatch,
+  PlayerRatingHistoryPoint,
+  RankingPlayer,
+  ResultFormState,
+  Slot,
+  SlotPlayer,
+  TabKey,
+} from './lib/padelTypes';
+
+import {
+  buildPointsChartGeometry,
+  computeWinnerTeam,
+  formatDate,
+  parseSetValue,
+  playerNameById,
+  rankingPlayerIdFromSlotPlayerId,
+  scoreText,
+  sortPlayers,
+  statsMap,
+  todayISO,
+} from './lib/padelUtils';
+
 const MAX_PLAYERS = 4;
 
 const supabase = createClient(
