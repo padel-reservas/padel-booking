@@ -1,7 +1,12 @@
 'use client';
 
 import React from 'react';
-import type { Match, RankingPlayer, SlotPlayer } from '../lib/padelTypes';
+import type {
+  Match,
+  RankingPlayer,
+  SlotPlayerWithPaymentUI,
+  Payment,
+} from '../lib/padelTypes';
 import { formatDate, playerNameById } from '../lib/padelUtils';
 
 const MAX_PLAYERS = 4;
@@ -10,9 +15,9 @@ type SlotWithPlayers = {
   id: number;
   date: string;
   time: string;
-  allPlayers: SlotPlayer[];
-  activePlayers: SlotPlayer[];
-  waitlistPlayers: SlotPlayer[];
+  allPlayers: SlotPlayerWithPaymentUI[];
+  activePlayers: SlotPlayerWithPaymentUI[];
+  waitlistPlayers: SlotPlayerWithPaymentUI[];
   match: Match | null;
 };
 
@@ -38,6 +43,84 @@ type Props = {
   openEditResultModal: (slotId: number) => void;
   deleteResult: (slotId: number) => Promise<void>;
 };
+
+function getPaymentBadge(player: SlotPlayerWithPaymentUI) {
+  if (player.paymentVisualStatus === 'paid') {
+    return {
+      label: '✅ Paid',
+      background: '#dcfce7',
+      color: '#166534',
+      border: '1px solid #bbf7d0',
+    };
+  }
+
+  if (player.paymentVisualStatus === 'reported') {
+    return {
+      label: '🟡 Reported',
+      background: '#fef3c7',
+      color: '#92400e',
+      border: '1px solid #fde68a',
+    };
+  }
+
+  return {
+    label: '⬜ Unpaid',
+    background: '#f1f5f9',
+    color: '#334155',
+    border: '1px solid #cbd5e1',
+  };
+}
+
+function formatPaymentDetail(player: SlotPlayerWithPaymentUI) {
+  if (player.paymentVisualStatus === 'paid') {
+    const payment = player.latestVerifiedPayment;
+    if (!payment) return 'Pago verificado';
+
+    const method = payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle';
+
+    if (player.paidByPlayerName && player.paidByPlayerName !== player.name) {
+      return `Verificado via ${method} · pagó ${player.paidByPlayerName}`;
+    }
+
+    return `Verificado via ${method}`;
+  }
+
+  if (player.paymentVisualStatus === 'reported') {
+    const payment = player.latestReportedPayment;
+    if (!payment) return 'Pago reportado pendiente de validación';
+
+    const method = payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle';
+
+    if (player.paidByPlayerName && player.paidByPlayerName !== player.name) {
+      return `Reportado via ${method} · dijo pagar ${player.paidByPlayerName}`;
+    }
+
+    return `Reportado via ${method}`;
+  }
+
+  if ((player.reminder_count || 0) > 0) {
+    return `Pendiente de pago · reminders: ${player.reminder_count}`;
+  }
+
+  return 'Pendiente de pago';
+}
+
+function getLatestReportedPaymentsForSlot(slot: SlotWithPlayers): Payment[] {
+  const paymentMap = new Map<string, Payment>();
+
+  for (const player of slot.allPlayers) {
+    const payment = player.latestReportedPayment;
+    if (!payment) continue;
+    if (payment.status !== 'reported') continue;
+    if (!paymentMap.has(payment.id)) {
+      paymentMap.set(payment.id, payment);
+    }
+  }
+
+  return Array.from(paymentMap.values()).sort(
+    (a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime()
+  );
+}
 
 export default function TurnosTab({
   groupedSlots,
@@ -77,6 +160,7 @@ export default function TurnosTab({
             {daySlots.map((slot) => {
               const isFull = slot.activePlayers.length >= MAX_PLAYERS;
               const hasMatch = !!slot.match;
+              const reportedPayments = getLatestReportedPaymentsForSlot(slot);
 
               return (
                 <div
@@ -142,6 +226,22 @@ export default function TurnosTab({
                           }}
                         >
                           Resultado cargado
+                        </div>
+                      )}
+
+                      {reportedPayments.length > 0 && (
+                        <div
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: 999,
+                            background: '#fef3c7',
+                            color: '#92400e',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            border: '1px solid #fde68a',
+                          }}
+                        >
+                          Payments reported: {reportedPayments.length}
                         </div>
                       )}
 
@@ -287,6 +387,7 @@ export default function TurnosTab({
                       <div style={{ display: 'grid', gap: 8 }}>
                         {slot.activePlayers.map((p, index) => {
                           const stats = rankingStats.get(p.name.trim().toLowerCase());
+                          const paymentBadge = getPaymentBadge(p);
 
                           return (
                             <div
@@ -303,31 +404,65 @@ export default function TurnosTab({
                                 background: '#f8fafc',
                               }}
                             >
-                              <div>
-                                <div style={{ fontWeight: 700 }}>
-                                  {index + 1}. {p.name}
+                              <div style={{ minWidth: 220, flex: 1 }}>
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    marginBottom: 4,
+                                  }}
+                                >
+                                  <div style={{ fontWeight: 700 }}>
+                                    {index + 1}. {p.name}
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      padding: '4px 8px',
+                                      borderRadius: 999,
+                                      background: paymentBadge.background,
+                                      color: paymentBadge.color,
+                                      border: paymentBadge.border,
+                                      fontWeight: 700,
+                                      fontSize: 12,
+                                    }}
+                                  >
+                                    {paymentBadge.label}
+                                  </div>
                                 </div>
 
                                 <div style={{ fontSize: 13, color: '#64748b' }}>
                                   {stats
                                     ? `#${stats.position} · ${stats.winPct}% victorias${
                                         stats.provisional ? ' · Provisional' : ''
-                                      } · ${p.paid ? 'Pagó' : 'No pagó'}`
-                                    : p.paid
-                                    ? 'Pago registrado'
-                                    : 'Pendiente de pago'}
+                                      }`
+                                    : 'Sin ranking'}
                                 </div>
+
+                                <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>
+                                  {formatPaymentDetail(p)}
+                                </div>
+
+                                {p.latestReportedPayment?.notes && (
+                                  <div
+                                    style={{
+                                      fontSize: 12,
+                                      color: '#92400e',
+                                      marginTop: 4,
+                                    }}
+                                  >
+                                    Note: {p.latestReportedPayment.notes}
+                                  </div>
+                                )}
                               </div>
 
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                 <button
-                                  onClick={() =>
-                                    adminAction({
-                                      action: adminUnlocked ? 'togglePaid' : 'selfTogglePaid',
-                                      playerId: p.id,
-                                      paid: !p.paid,
-                                    }).then(() => loadData())
-                                  }
+                                  onClick={() => {
+                                    alert('Próximo paso: abrir Report Payment modal');
+                                  }}
                                   style={{
                                     padding: '8px 10px',
                                     borderRadius: 10,
@@ -336,8 +471,46 @@ export default function TurnosTab({
                                     cursor: 'pointer',
                                   }}
                                 >
-                                  {p.paid ? 'Desmarcar pago' : 'Marcar pago'}
+                                  Report Payment
                                 </button>
+
+                                {adminUnlocked && p.paymentVisualStatus === 'reported' && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        alert('Próximo paso: approve payment');
+                                      }}
+                                      style={{
+                                        padding: '8px 10px',
+                                        borderRadius: 10,
+                                        border: 'none',
+                                        background: '#166534',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      Approve
+                                    </button>
+
+                                    <button
+                                      onClick={() => {
+                                        alert('Próximo paso: reject payment');
+                                      }}
+                                      style={{
+                                        padding: '8px 10px',
+                                        borderRadius: 10,
+                                        border: 'none',
+                                        background: '#b45309',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      Reject
+                                    </button>
+                                  </>
+                                )}
 
                                 <button
                                   onClick={() => removePlayer(p.id)}
@@ -379,7 +552,10 @@ export default function TurnosTab({
                         {playerNameById(rankingPlayers, slot.match.team_b_player_2_id)}
                       </div>
                       <div style={{ fontWeight: 700 }}>
-                        Score: {slot.match.set1_a != null || slot.match.set2_a != null || slot.match.set3_a != null
+                        Score:{' '}
+                        {slot.match.set1_a != null ||
+                        slot.match.set2_a != null ||
+                        slot.match.set3_a != null
                           ? `${slot.match.set1_a != null && slot.match.set1_b != null ? `${slot.match.set1_a}-${slot.match.set1_b}` : ''}${
                               slot.match.set2_a != null && slot.match.set2_b != null
                                 ? `${slot.match.set1_a != null && slot.match.set1_b != null ? ' / ' : ''}${slot.match.set2_a}-${slot.match.set2_b}`
@@ -406,6 +582,7 @@ export default function TurnosTab({
                       <div style={{ display: 'grid', gap: 8 }}>
                         {slot.waitlistPlayers.map((p, index) => {
                           const stats = rankingStats.get(p.name.trim().toLowerCase());
+                          const paymentBadge = getPaymentBadge(p);
 
                           return (
                             <div
@@ -422,29 +599,53 @@ export default function TurnosTab({
                                 background: '#f8fafc',
                               }}
                             >
-                              <div>
-                                <div style={{ fontWeight: 700 }}>
-                                  {MAX_PLAYERS + index + 1}. {p.name}
+                              <div style={{ minWidth: 220, flex: 1 }}>
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    marginBottom: 4,
+                                  }}
+                                >
+                                  <div style={{ fontWeight: 700 }}>
+                                    {MAX_PLAYERS + index + 1}. {p.name}
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      padding: '4px 8px',
+                                      borderRadius: 999,
+                                      background: paymentBadge.background,
+                                      color: paymentBadge.color,
+                                      border: paymentBadge.border,
+                                      fontWeight: 700,
+                                      fontSize: 12,
+                                    }}
+                                  >
+                                    {paymentBadge.label}
+                                  </div>
                                 </div>
 
                                 <div style={{ fontSize: 13, color: '#64748b' }}>
                                   {stats
                                     ? `En espera · #${stats.position} · ${stats.winPct}% victorias${
                                         stats.provisional ? ' · Provisional' : ''
-                                      } · ${p.paid ? 'Pagó' : 'No pagó'}`
-                                    : `En espera · ${p.paid ? 'Pagó' : 'No pagó'}`}
+                                      }`
+                                    : 'En espera · Sin ranking'}
+                                </div>
+
+                                <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>
+                                  {formatPaymentDetail(p)}
                                 </div>
                               </div>
 
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                 <button
-                                  onClick={() =>
-                                    adminAction({
-                                      action: adminUnlocked ? 'togglePaid' : 'selfTogglePaid',
-                                      playerId: p.id,
-                                      paid: !p.paid,
-                                    }).then(() => loadData())
-                                  }
+                                  onClick={() => {
+                                    alert('Próximo paso: abrir Report Payment modal');
+                                  }}
                                   style={{
                                     padding: '8px 10px',
                                     borderRadius: 10,
@@ -453,7 +654,7 @@ export default function TurnosTab({
                                     cursor: 'pointer',
                                   }}
                                 >
-                                  {p.paid ? 'Desmarcar pago' : 'Marcar pago'}
+                                  Report Payment
                                 </button>
 
                                 <button
@@ -467,6 +668,96 @@ export default function TurnosTab({
                                   }}
                                 >
                                   Borrarme
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {adminUnlocked && reportedPayments.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 14,
+                        paddingTop: 12,
+                        borderTop: '1px solid #e5e7eb',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Payments reported</div>
+
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {reportedPayments.map((payment) => {
+                          const payerName =
+                            slot.allPlayers.find((p) => p.id === payment.payer_player_id)?.name ||
+                            'Jugador';
+
+                          return (
+                            <div
+                              key={payment.id}
+                              style={{
+                                border: '1px solid #fde68a',
+                                borderRadius: 12,
+                                padding: 12,
+                                background: '#fffbeb',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 700 }}>
+                                  {payerName} reportó pago via{' '}
+                                  {payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle'}
+                                </div>
+
+                                <div style={{ fontSize: 13, color: '#92400e', marginTop: 4 }}>
+                                  Estado: {payment.status}
+                                </div>
+
+                                {payment.notes && (
+                                  <div style={{ fontSize: 13, color: '#92400e', marginTop: 4 }}>
+                                    Note: {payment.notes}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                <button
+                                  onClick={() => {
+                                    alert('Próximo paso: approve payment');
+                                  }}
+                                  style={{
+                                    padding: '8px 10px',
+                                    borderRadius: 10,
+                                    border: 'none',
+                                    background: '#166534',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Approve
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    alert('Próximo paso: reject payment');
+                                  }}
+                                  style={{
+                                    padding: '8px 10px',
+                                    borderRadius: 10,
+                                    border: 'none',
+                                    background: '#b45309',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Reject
                                 </button>
                               </div>
                             </div>
