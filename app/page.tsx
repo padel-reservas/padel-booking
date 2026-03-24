@@ -898,6 +898,46 @@ export default function Page() {
     await loadData();
   }
 
+  async function approvePayment(paymentId: string) {
+    if (!adminUnlocked) {
+      alert('Primero tenés que entrar como admin.');
+      return;
+    }
+
+    const { error } = await supabase.rpc('approve_payment', {
+      p_payment_id: paymentId,
+      p_verified_by: 'admin',
+    });
+
+    if (error) {
+      alert(`No se pudo aprobar el payment: ${error.message}`);
+      return;
+    }
+
+    await loadData();
+  }
+
+  async function rejectPayment(paymentId: string) {
+    if (!adminUnlocked) {
+      alert('Primero tenés que entrar como admin.');
+      return;
+    }
+
+    const ok = window.confirm('¿Seguro que querés rechazar este payment reportado?');
+    if (!ok) return;
+
+    const { error } = await supabase.rpc('reject_payment', {
+      p_payment_id: paymentId,
+    });
+
+    if (error) {
+      alert(`No se pudo rechazar el payment: ${error.message}`);
+      return;
+    }
+
+    await loadData();
+  }
+
   async function saveResult() {
     if (!resultForm) return;
 
@@ -1402,6 +1442,8 @@ export default function Page() {
           openEditResultModal={openEditResultModal}
           deleteResult={deleteResult}
           openReportPaymentModal={openReportPaymentModal}
+          approvePayment={approvePayment}
+          rejectPayment={rejectPayment}
         />
       )}
 
