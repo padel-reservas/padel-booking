@@ -42,6 +42,7 @@ type Props = {
   openNewResultModal: (slotId: number) => void;
   openEditResultModal: (slotId: number) => void;
   deleteResult: (slotId: number) => Promise<void>;
+  openReportPaymentModal: (slotId: number, defaultPayerPlayerId?: number) => void;
 };
 
 function getPaymentBadge(player: SlotPlayerWithPaymentUI) {
@@ -92,7 +93,7 @@ function formatPaymentDetail(player: SlotPlayerWithPaymentUI) {
     const method = payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle';
 
     if (player.paidByPlayerName && player.paidByPlayerName !== player.name) {
-      return `Reportado via ${method} · dijo pagar ${player.paidByPlayerName}`;
+      return `Reportado via ${method} · pagó ${player.paidByPlayerName}`;
     }
 
     return `Reportado via ${method}`;
@@ -136,6 +137,7 @@ export default function TurnosTab({
   openNewResultModal,
   openEditResultModal,
   deleteResult,
+  openReportPaymentModal,
 }: Props) {
   return (
     <>
@@ -460,9 +462,7 @@ export default function TurnosTab({
 
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                 <button
-                                  onClick={() => {
-                                    alert('Próximo paso: abrir Report Payment modal');
-                                  }}
+                                  onClick={() => openReportPaymentModal(slot.id, p.id)}
                                   style={{
                                     padding: '8px 10px',
                                     borderRadius: 10,
@@ -643,9 +643,7 @@ export default function TurnosTab({
 
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                 <button
-                                  onClick={() => {
-                                    alert('Próximo paso: abrir Report Payment modal');
-                                  }}
+                                  onClick={() => openReportPaymentModal(slot.id, p.id)}
                                   style={{
                                     padding: '8px 10px',
                                     borderRadius: 10,
