@@ -45,6 +45,7 @@ type Props = {
   openReportPaymentModal: (slotId: number, defaultPayerPlayerId?: number) => void;
   approvePayment: (paymentId: string) => Promise<void>;
   rejectPayment: (paymentId: string) => Promise<void>;
+  sendWhatsAppReminder: (slotId: number) => Promise<void>;
 };
 
 function getPaymentBadge(player: SlotPlayerWithPaymentUI) {
@@ -125,6 +126,17 @@ function getLatestReportedPaymentsForSlot(slot: SlotWithPlayers): Payment[] {
   );
 }
 
+function canShowWhatsAppReminder(slot: SlotWithPlayers) {
+  const unpaidPlayers = slot.allPlayers.filter((p) => p.paymentVisualStatus === 'unpaid');
+  if (unpaidPlayers.length === 0) return false;
+
+  const now = new Date();
+  const reminderAllowedAt = new Date(`${slot.date}T07:30:00`);
+  reminderAllowedAt.setDate(reminderAllowedAt.getDate() + 1);
+
+  return now.getTime() >= reminderAllowedAt.getTime();
+}
+
 export default function TurnosTab({
   groupedSlots,
   rankingPlayers,
@@ -142,6 +154,7 @@ export default function TurnosTab({
   openReportPaymentModal,
   approvePayment,
   rejectPayment,
+  sendWhatsAppReminder,
 }: Props) {
   return (
     <>
@@ -167,6 +180,7 @@ export default function TurnosTab({
               const isFull = slot.activePlayers.length >= MAX_PLAYERS;
               const hasMatch = !!slot.match;
               const reportedPayments = getLatestReportedPaymentsForSlot(slot);
+              const showWhatsAppReminder = canShowWhatsAppReminder(slot);
 
               return (
                 <div
@@ -249,6 +263,23 @@ export default function TurnosTab({
                         >
                           Payments reported: {reportedPayments.length}
                         </div>
+                      )}
+
+                      {showWhatsAppReminder && (
+                        <button
+                          onClick={() => sendWhatsAppReminder(slot.id)}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: 10,
+                            border: 'none',
+                            background: '#16a34a',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                        >
+                          WhatsApp Reminder
+                        </button>
                       )}
 
                       {adminUnlocked && (
