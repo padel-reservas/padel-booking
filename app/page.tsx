@@ -10,6 +10,7 @@ import RankingTab from './components/RankingTab';
 import TurnosTab from './components/TurnosTab';
 import ResultModal from './components/ResultModal';
 import ReportPaymentModal from './components/ReportPaymentModal';
+import WhatsAppReminderModal from './components/WhatsAppReminderModal';
 
 import type {
   ActivityMatch,
@@ -140,6 +141,10 @@ export default function Page() {
     useState<ReportPaymentFormState | null>(null);
   const [savingPayment, setSavingPayment] = useState(false);
   const [selectedPaymentSlotId, setSelectedPaymentSlotId] = useState<number | null>(null);
+
+  const [whatsAppReminderModalOpen, setWhatsAppReminderModalOpen] = useState(false);
+  const [whatsAppReminderMessage, setWhatsAppReminderMessage] = useState('');
+  const [whatsAppReminderCopied, setWhatsAppReminderCopied] = useState(false);
 
   const [myPlayerName, setMyPlayerName] = useState<string>('');
 
@@ -966,10 +971,26 @@ export default function Page() {
       }
     }
 
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+    setWhatsAppReminderMessage(message);
+    setWhatsAppReminderCopied(false);
+    setWhatsAppReminderModalOpen(true);
 
     await loadData();
+  }
+
+  async function copyWhatsAppReminderMessage() {
+    try {
+      await navigator.clipboard.writeText(whatsAppReminderMessage);
+      setWhatsAppReminderCopied(true);
+    } catch {
+      alert('No se pudo copiar automáticamente. Copialo manualmente.');
+    }
+  }
+
+  function closeWhatsAppReminderModal() {
+    setWhatsAppReminderModalOpen(false);
+    setWhatsAppReminderMessage('');
+    setWhatsAppReminderCopied(false);
   }
 
   async function saveResult() {
@@ -1549,6 +1570,14 @@ export default function Page() {
         setReportPaymentForm={setReportPaymentForm}
         closeReportPaymentModal={closeReportPaymentModal}
         saveReportedPayment={saveReportedPayment}
+      />
+
+      <WhatsAppReminderModal
+        open={whatsAppReminderModalOpen}
+        message={whatsAppReminderMessage}
+        copied={whatsAppReminderCopied}
+        onCopy={copyWhatsAppReminderMessage}
+        onClose={closeWhatsAppReminderModal}
       />
     </div>
   );
