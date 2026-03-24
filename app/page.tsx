@@ -9,6 +9,7 @@ import DuelTab from './components/DuelTab';
 import RankingTab from './components/RankingTab';
 import TurnosTab from './components/TurnosTab';
 import ResultModal from './components/ResultModal';
+import ReportPaymentModal from './components/ReportPaymentModal';
 
 import type {
   ActivityMatch,
@@ -24,6 +25,7 @@ import type {
   TabKey,
   Payment,
   PaymentAllocationWithPayment,
+  ReportPaymentFormState,
 } from './lib/padelTypes';
 
 import {
@@ -132,6 +134,12 @@ export default function Page() {
   const [resultModalOpen, setResultModalOpen] = useState(false);
   const [resultForm, setResultForm] = useState<ResultFormState | null>(null);
   const [savingResult, setSavingResult] = useState(false);
+
+  const [reportPaymentModalOpen, setReportPaymentModalOpen] = useState(false);
+  const [reportPaymentForm, setReportPaymentForm] =
+    useState<ReportPaymentFormState | null>(null);
+  const [savingPayment, setSavingPayment] = useState(false);
+  const [selectedPaymentSlotId, setSelectedPaymentSlotId] = useState<number | null>(null);
 
   const [myPlayerName, setMyPlayerName] = useState<string>('');
 
@@ -598,6 +606,11 @@ export default function Page() {
     return grouped;
   }, [slotsWithPlayers]);
 
+  const selectedPaymentSlot = useMemo(() => {
+    if (selectedPaymentSlotId == null) return null;
+    return slotsWithPlayers.find((slot) => slot.id === selectedPaymentSlotId) || null;
+  }, [selectedPaymentSlotId, slotsWithPlayers]);
+
   async function addPlayer(slotId: number) {
     const rawName = (nameInput[slotId] || '').trim();
 
@@ -778,6 +791,111 @@ export default function Page() {
   function closeResultModal() {
     setResultModalOpen(false);
     setResultForm(null);
+  }
+
+  function openReportPaymentModal(slotId: number, defaultPayerPlayerId?: number) {
+    const slot = slotsWithPlayers.find((s) => s.id === slotId);
+    if (!slot) return;
+
+    setSelectedPaymentSlotId(slotId);
+    setReportPaymentForm({
+      payerPlayerId: defaultPayerPlayerId ?? '',
+      paymentMethod: '',
+      coveredPlayerIds: defaultPayerPlayerId ? [defaultPayerPlayerId] : [],
+      amount: '',
+      notes: '',
+    });
+    setReportPaymentModalOpen(true);
+  }
+
+  function closeReportPaymentModal() {
+    setReportPaymentModalOpen(false);
+    setReportPaymentForm(null);
+    setSelectedPaymentSlotId(null);
+  }
+
+  async function saveReportedPayment() {
+    if (!reportPaymentForm || !selectedPaymentSlot) return;
+
+    if (reportPaymentForm.payerPlayerId === '') {
+      alert('Elegí quién pagó.');
+      return;
+    }
+
+    if (!reportPaymentForm.paymentMethod) {
+      alert('Elegí el método de pago.');
+      return;
+    }
+
+    if (reportPaymentForm.coveredPlayerIds.length === 0) {
+      alert('Elegí al menos un jugador cubierto por este pago.');
+      return;
+    }
+
+    const validPlayerIds = new Set(selectedPaymentSlot.allPlayers.map((p) => p.id));
+    const invalidCovered = reportPaymentForm.coveredPlayerIds.some((id) => !validPlayerIds.has(id));
+
+    if (invalidCovered) {
+      alert('Hay jugadores seleccionados que no pertenecen a este turno.');
+      return;
+    }
+
+    if (!validPlayerIds.has(reportPaymentForm.payerPlayerId)) {
+      alert('El jugador que paga no pertenece a este turno.');
+      return;
+    }
+
+    let amountValue: number | null = null;
+    const rawAmount = reportPaymentForm.amount.trim();
+
+    if (rawAmount) {
+      const parsed = Number(rawAmount.replace(',', '.'));
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        alert('El monto debe ser un número válido mayor a 0.');
+        return;
+      }
+      amountValue = parsed;
+    }
+
+    setSavingPayment(true);
+
+    const { data: paymentInsert, error: paymentError } = await supabase
+      .from('payments')
+      .insert({
+        payer_player_id: reportPaymentForm.payerPlayerId,
+        payment_method: reportPaymentForm.paymentMethod,
+        status: 'reported',
+        amount: amountValue,
+        notes: reportPaymentForm.notes.trim() || null,
+      })
+      .select('id')
+      .single();
+
+    if (paymentError || !paymentInsert) {
+      setSavingPayment(false);
+      alert(`No se pudo guardar el payment: ${paymentError?.message || 'error desconocido'}`);
+      return;
+    }
+
+    const allocationsPayload = reportPaymentForm.coveredPlayerIds.map((playerId) => ({
+      payment_id: paymentInsert.id,
+      player_id: playerId,
+    }));
+
+    const { error: allocationsError } = await supabase
+      .from('payment_allocations')
+      .insert(allocationsPayload);
+
+    if (allocationsError) {
+      await supabase.from('payments').delete().eq('id', paymentInsert.id);
+      setSavingPayment(false);
+      alert(`No se pudieron guardar las allocations: ${allocationsError.message}`);
+      return;
+    }
+
+    setSavingPayment(false);
+    closeReportPaymentModal();
+    await loadData();
   }
 
   async function saveResult() {
@@ -1283,6 +1401,7 @@ export default function Page() {
           openNewResultModal={openNewResultModal}
           openEditResultModal={openEditResultModal}
           deleteResult={deleteResult}
+          openReportPaymentModal={openReportPaymentModal}
         />
       )}
 
@@ -1343,6 +1462,16 @@ export default function Page() {
         setResultForm={setResultForm}
         closeResultModal={closeResultModal}
         saveResult={saveResult}
+      />
+
+      <ReportPaymentModal
+        reportPaymentModalOpen={reportPaymentModalOpen}
+        reportPaymentForm={reportPaymentForm}
+        savingPayment={savingPayment}
+        slot={selectedPaymentSlot}
+        setReportPaymentForm={setReportPaymentForm}
+        closeReportPaymentModal={closeReportPaymentModal}
+        saveReportedPayment={saveReportedPayment}
       />
     </div>
   );
