@@ -4,12 +4,65 @@ export type Slot = {
   time: string;
 };
 
+export type PaymentMethod = 'venmo' | 'zelle';
+export type PaymentStatus = 'reported' | 'verified' | 'rejected';
+export type PaymentVisualStatus = 'paid' | 'reported' | 'unpaid';
+
 export type SlotPlayer = {
   id: number;
   slot_id: number;
   name: string;
   paid: boolean;
   created_at?: string;
+
+  paid_at?: string | null;
+  payment_updated_at?: string | null;
+  reminder_count?: number;
+  last_reminder_at?: string | null;
+  last_reminder_channel?: 'whatsapp' | null;
+
+  payment_allocations?: PaymentAllocationWithPayment[];
+};
+
+export type Payment = {
+  id: string;
+  payer_player_id: number;
+  payment_method: PaymentMethod;
+  status: PaymentStatus;
+  amount?: number | null;
+  notes?: string | null;
+  reported_at: string;
+  verified_at?: string | null;
+  verified_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type PaymentAllocation = {
+  id: string;
+  payment_id: string;
+  player_id: number;
+  created_at?: string;
+};
+
+export type PaymentAllocationWithPayment = PaymentAllocation & {
+  payment?: Payment | null;
+};
+
+export type SlotPlayerWithPaymentUI = SlotPlayer & {
+  paymentVisualStatus: PaymentVisualStatus;
+  latestReportedPayment?: Payment | null;
+  latestVerifiedPayment?: Payment | null;
+  paidByPlayerId?: number | null;
+  paidByPlayerName?: string | null;
+};
+
+export type ReportPaymentFormState = {
+  payerPlayerId: number | '';
+  paymentMethod: PaymentMethod | '';
+  coveredPlayerIds: number[];
+  amount: string;
+  notes: string;
 };
 
 export type RankingPlayer = {
