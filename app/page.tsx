@@ -11,6 +11,8 @@ import TurnosTab from './components/TurnosTab';
 import ResultModal from './components/ResultModal';
 import ReportPaymentModal from './components/ReportPaymentModal';
 import WhatsAppReminderModal from './components/WhatsAppReminderModal';
+import Image from 'next/image';
+import logoDisplay from './logo-display.png';
 
 import type {
   ActivityMatch,
@@ -1251,19 +1253,20 @@ export default function Page() {
       marginBottom: 10,
     }}
   >
-    <img
-      src="/logo.png"
-      alt="Greenwich Padel"
-      style={{
-        width: 64,
-        height: 64,
-        borderRadius: 16,
-        objectFit: 'cover',
-        border: '1px solid #e5e7eb',
-        background: '#111827',
-      }}
-    />
-
+    <Image
+  src={logoDisplay}
+  alt="Greenwich Padel"
+  width={64}
+  height={64}
+  style={{
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    objectFit: 'cover',
+    border: '1px solid #e5e7eb',
+    background: '#111827',
+  }}
+/>
     <div>
       <h1
         style={{
