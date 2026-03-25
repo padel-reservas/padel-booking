@@ -1234,42 +1234,76 @@ export default function Page() {
       }}
     >
       <div
+  style={{
+    background: 'white',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    border: '1px solid #e5e7eb',
+  }}
+>
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 14,
+      flexWrap: 'wrap',
+      marginBottom: 10,
+    }}
+  >
+    <img
+      src="/greenwich-padel-logo.png"
+      alt="Greenwich Padel"
+      style={{
+        width: 64,
+        height: 64,
+        borderRadius: 16,
+        objectFit: 'cover',
+        border: '1px solid #e5e7eb',
+        background: '#111827',
+      }}
+    />
+
+    <div>
+      <h1
         style={{
-          background: 'white',
-          borderRadius: 20,
-          padding: 20,
-          marginBottom: 16,
-          border: '1px solid #e5e7eb',
+          margin: 0,
+          fontSize: 28,
+          fontWeight: 800,
+          color: '#0f172a',
         }}
       >
-        <h1 style={{ margin: 0, fontSize: 30 }}>Reservas de Pádel</h1>
-        <p style={{ marginTop: 8, color: '#64748b' }}>
-          Turnos, ranking e historial en una sola app.
-        </p>
+        Greenwich Padel
+      </h1>
+      <p style={{ marginTop: 6, marginBottom: 0, color: '#64748b' }}>
+        Turnos, ranking e historial en una sola app.
+      </p>
+    </div>
+  </div>
 
-        <div
-          style={{
-            marginTop: 10,
-            marginBottom: 6,
-            padding: '8px 12px',
-            borderRadius: 12,
-            background: '#fef3c7',
-            color: '#92400e',
-            fontWeight: 800,
-            display: 'inline-block',
-          }}
-        >
-          PAGO PUBLICO ACTIVO
-        </div>
+  <div
+    style={{
+      marginTop: 10,
+      marginBottom: 6,
+      padding: '8px 12px',
+      borderRadius: 12,
+      background: '#fef3c7',
+      color: '#92400e',
+      fontWeight: 800,
+      display: 'inline-block',
+    }}
+  >
+    PAGO PUBLICO ACTIVO
+  </div>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            flexWrap: 'wrap',
-            marginTop: 12,
-          }}
-        >
+  <div
+    style={{
+      display: 'flex',
+      gap: 8,
+      flexWrap: 'wrap',
+      marginTop: 12,
+    }}
+  >
           <button
             onClick={loadData}
             style={{
