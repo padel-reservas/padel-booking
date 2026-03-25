@@ -36,6 +36,9 @@ type Props = {
   chartGeometry: ChartGeometry;
 };
 
+const COL_RANK_WIDTH = 64;
+const COL_PLAYER_WIDTH = 190;
+
 export default function RankingTab({
   rankingPlayers,
   myPlayerName,
@@ -375,201 +378,256 @@ export default function RankingTab({
         )}
       </div>
 
-      <table
-        style={{
-          width: '100%',
-          borderCollapse: 'separate',
-          borderSpacing: 0,
-          minWidth: 720,
-        }}
-      >
-        <thead>
-          <tr>
-            {['#', 'Jugador', 'Puntos', 'PJ', 'G', 'P', '%', 'Prov.', 'Racha', 'Mejor'].map(
-              (label) => (
-                <th
-                  key={label}
-                  style={{
-                    textAlign: 'left',
-                    padding: '14px 12px',
-                    fontSize: 13,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    color: '#475569',
-                    background: '#f8fafc',
-                    borderTop: '1px solid #e5e7eb',
-                    borderBottom: '1px solid #e5e7eb',
-                  }}
-                >
-                  {label}
-                </th>
-              )
-            )}
-          </tr>
-        </thead>
+      <div style={{ overflowX: 'auto' }}>
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'separate',
+            borderSpacing: 0,
+            minWidth: 900,
+            tableLayout: 'fixed',
+          }}
+        >
+          <thead>
+            <tr>
+              {['#', 'Jugador', 'Puntos', 'PJ', 'G', 'P', '%', 'Prov.', 'Racha', 'Mejor'].map(
+                (label, idx) => {
+                  const isRankCol = idx === 0;
+                  const isPlayerCol = idx === 1;
 
-        <tbody>
-          {[...rankingPlayers]
-            .sort((a, b) => {
-              if (b.display_rating !== a.display_rating) return b.display_rating - a.display_rating;
-              if (b.elo_rating !== a.elo_rating) return b.elo_rating - a.elo_rating;
-              return a.name.localeCompare(b.name);
-            })
-            .map((p, idx) => {
-              const isTop3 = idx < 3;
-              const isMe =
-                myPlayerName &&
-                p.name.trim().toLowerCase() === myPlayerName.trim().toLowerCase();
-              const isChartPlayer =
-                chartPlayerName &&
-                p.name.trim().toLowerCase() === chartPlayerName.trim().toLowerCase();
+                  return (
+                    <th
+                      key={label}
+                      style={{
+                        textAlign: 'left',
+                        padding: '14px 12px',
+                        fontSize: 13,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        color: '#475569',
+                        background: '#f8fafc',
+                        borderTop: '1px solid #e5e7eb',
+                        borderBottom: '1px solid #e5e7eb',
+                        position: isRankCol || isPlayerCol ? 'sticky' : undefined,
+                        left: isRankCol ? 0 : isPlayerCol ? COL_RANK_WIDTH : undefined,
+                        zIndex: isRankCol ? 4 : isPlayerCol ? 3 : 1,
+                        width: isRankCol
+                          ? COL_RANK_WIDTH
+                          : isPlayerCol
+                          ? COL_PLAYER_WIDTH
+                          : undefined,
+                        minWidth: isRankCol
+                          ? COL_RANK_WIDTH
+                          : isPlayerCol
+                          ? COL_PLAYER_WIDTH
+                          : undefined,
+                        boxShadow: isPlayerCol
+                          ? '2px 0 0 #e5e7eb'
+                          : undefined,
+                      }}
+                    >
+                      {label}
+                    </th>
+                  );
+                }
+              )}
+            </tr>
+          </thead>
 
-              const rowBg = isMe
-                ? '#dbeafe'
-                : idx === 0
-                ? '#fffbea'
-                : idx === 1
-                ? '#f8fafc'
-                : idx === 2
-                ? '#fff7ed'
-                : idx % 2 === 0
-                ? 'white'
-                : '#fcfcfd';
+          <tbody>
+            {[...rankingPlayers]
+              .sort((a, b) => {
+                if (b.display_rating !== a.display_rating) return b.display_rating - a.display_rating;
+                if (b.elo_rating !== a.elo_rating) return b.elo_rating - a.elo_rating;
+                return a.name.localeCompare(b.name);
+              })
+              .map((p, idx) => {
+                const isTop3 = idx < 3;
+                const isMe =
+                  myPlayerName &&
+                  p.name.trim().toLowerCase() === myPlayerName.trim().toLowerCase();
+                const isChartPlayer =
+                  chartPlayerName &&
+                  p.name.trim().toLowerCase() === chartPlayerName.trim().toLowerCase();
 
-              return (
-                <tr
-                  key={p.id}
-                  onClick={() => setSelectedChartPlayer(p.name)}
-                  style={{
-                    background: rowBg,
-                    cursor: 'pointer',
-                    boxShadow: isChartPlayer ? 'inset 0 0 0 2px #93c5fd' : undefined,
-                    borderLeft: isMe ? '4px solid #2563eb' : undefined,
-                  }}
-                >
-                  <td
+                const rowBg = isMe
+                  ? '#dbeafe'
+                  : idx === 0
+                  ? '#fffbea'
+                  : idx === 1
+                  ? '#f8fafc'
+                  : idx === 2
+                  ? '#fff7ed'
+                  : idx % 2 === 0
+                  ? 'white'
+                  : '#fcfcfd';
+
+                return (
+                  <tr
+                    key={p.id}
+                    onClick={() => setSelectedChartPlayer(p.name)}
                     style={{
-                      padding: '14px 12px',
-                      borderBottom: '1px solid #eef2f7',
-                      fontWeight: 800,
+                      background: rowBg,
+                      cursor: 'pointer',
+                      boxShadow: isChartPlayer ? 'inset 0 0 0 2px #93c5fd' : undefined,
                     }}
                   >
-                    {idx + 1}
-                  </td>
+                    <td
+                      style={{
+                        padding: '14px 12px',
+                        borderBottom: '1px solid #eef2f7',
+                        fontWeight: 800,
+                        position: 'sticky',
+                        left: 0,
+                        zIndex: 3,
+                        background: rowBg,
+                        width: COL_RANK_WIDTH,
+                        minWidth: COL_RANK_WIDTH,
+                      }}
+                    >
+                      {idx + 1}
+                    </td>
 
-                  <td
-                    style={{
-                      padding: '14px 12px',
-                      borderBottom: '1px solid #eef2f7',
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>{p.name}</span>
-                      {isMe && (
+                    <td
+                      style={{
+                        padding: '14px 12px',
+                        borderBottom: '1px solid #eef2f7',
+                        position: 'sticky',
+                        left: COL_RANK_WIDTH,
+                        zIndex: 2,
+                        background: rowBg,
+                        width: COL_PLAYER_WIDTH,
+                        minWidth: COL_PLAYER_WIDTH,
+                        boxShadow: '2px 0 0 #e5e7eb',
+                        borderLeft: isMe ? '4px solid #2563eb' : undefined,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
                         <span
                           style={{
-                            padding: '5px 10px',
-                            borderRadius: 999,
-                            fontSize: 12,
-                            fontWeight: 800,
-                            background: '#1d4ed8',
-                            color: 'white',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
                           }}
                         >
-                          Vos
+                          {p.name}
                         </span>
-                      )}
-                    </div>
-                  </td>
+                        {isMe && (
+                          <span
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 800,
+                              background: '#1d4ed8',
+                              color: 'white',
+                              flexShrink: 0,
+                            }}
+                          >
+                            Vos
+                          </span>
+                        )}
+                      </div>
+                    </td>
 
-                  <td
-                    style={{
-                      padding: '14px 12px',
-                      borderBottom: '1px solid #eef2f7',
-                    }}
-                  >
-                    <div
+                    <td
                       style={{
-                        display: 'inline-flex',
-                        padding: '6px 10px',
-                        borderRadius: 999,
-                        background: isTop3 ? '#111827' : '#eff6ff',
-                        color: isTop3 ? 'white' : '#1d4ed8',
-                        fontWeight: 800,
+                        padding: '14px 12px',
+                        borderBottom: '1px solid #eef2f7',
                       }}
                     >
-                      {Math.round(Number(p.display_rating))}
-                    </div>
-                  </td>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          padding: '6px 10px',
+                          borderRadius: 999,
+                          background: isTop3 ? '#111827' : '#eff6ff',
+                          color: isTop3 ? 'white' : '#1d4ed8',
+                          fontWeight: 800,
+                        }}
+                      >
+                        {Math.round(Number(p.display_rating))}
+                      </div>
+                    </td>
 
-                  <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-                    {p.matches_played}
-                  </td>
+                    <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+                      {p.matches_played}
+                    </td>
 
-                  <td
-                    style={{
-                      padding: '14px 12px',
-                      borderBottom: '1px solid #eef2f7',
-                      color: '#166534',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {p.wins}
-                  </td>
-
-                  <td
-                    style={{
-                      padding: '14px 12px',
-                      borderBottom: '1px solid #eef2f7',
-                      color: '#b91c1c',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {p.losses}
-                  </td>
-
-                  <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-                    {Number(p.win_pct).toFixed(2)}%
-                  </td>
-
-                  <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-                    <span
+                    <td
                       style={{
-                        padding: '5px 10px',
-                        borderRadius: 999,
-                        fontSize: 12,
+                        padding: '14px 12px',
+                        borderBottom: '1px solid #eef2f7',
+                        color: '#166534',
                         fontWeight: 700,
-                        background: p.provisional ? '#fef2f2' : '#ecfdf5',
-                        color: p.provisional ? '#b91c1c' : '#166534',
                       }}
                     >
-                      {p.provisional ? 'Sí' : 'No'}
-                    </span>
-                  </td>
+                      {p.wins}
+                    </td>
 
-                  <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-                    <span
+                    <td
                       style={{
-                        padding: '5px 10px',
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 800,
-                        background: p.current_win_streak > 0 ? '#fff7ed' : '#f8fafc',
-                        color: p.current_win_streak > 0 ? '#c2410c' : '#64748b',
+                        padding: '14px 12px',
+                        borderBottom: '1px solid #eef2f7',
+                        color: '#b91c1c',
+                        fontWeight: 700,
                       }}
                     >
-                      {p.current_win_streak > 0 ? `🔥 ${p.current_win_streak}` : '0'}
-                    </span>
-                  </td>
+                      {p.losses}
+                    </td>
 
-                  <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-                    {p.best_win_streak}
-                  </td>
-                </tr>
-              );
-            })}
-        </tbody>
-      </table>
+                    <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+                      {Number(p.win_pct).toFixed(2)}%
+                    </td>
+
+                    <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+                      <span
+                        style={{
+                          padding: '5px 10px',
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          background: p.provisional ? '#fef2f2' : '#ecfdf5',
+                          color: p.provisional ? '#b91c1c' : '#166534',
+                        }}
+                      >
+                        {p.provisional ? 'Sí' : 'No'}
+                      </span>
+                    </td>
+
+                    <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+                      <span
+                        style={{
+                          padding: '5px 10px',
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 800,
+                          background: p.current_win_streak > 0 ? '#fff7ed' : '#f8fafc',
+                          color: p.current_win_streak > 0 ? '#c2410c' : '#64748b',
+                        }}
+                      >
+                        {p.current_win_streak > 0 ? `🔥 ${p.current_win_streak}` : '0'}
+                      </span>
+                    </td>
+
+                    <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+                      {p.best_win_streak}
+                    </td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
