@@ -69,9 +69,9 @@ function getPaymentBadge(player: SlotPlayerWithPaymentUI) {
 
   return {
     label: '⬜ Unpaid',
-    background: '#f1f5f9',
-    color: '#334155',
-    border: '1px solid #cbd5e1',
+    background: '#fee2e2',
+    color: '#991b1b',
+    border: '1px solid #fecaca',
   };
 }
 
@@ -137,6 +137,29 @@ function canShowWhatsAppReminder(slot: SlotWithPlayers) {
   return now.getTime() >= reminderAllowedAt.getTime();
 }
 
+const primaryButtonStyle: React.CSSProperties = {
+  padding: '12px 16px',
+  borderRadius: 12,
+  border: 'none',
+  color: 'white',
+  cursor: 'pointer',
+  fontWeight: 700,
+  fontSize: 14,
+  minHeight: 44,
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  padding: '12px 16px',
+  borderRadius: 12,
+  border: '1px solid #d1d5db',
+  background: 'white',
+  color: '#111827',
+  cursor: 'pointer',
+  fontWeight: 700,
+  fontSize: 14,
+  minHeight: 44,
+};
+
 export default function TurnosTab({
   groupedSlots,
   rankingPlayers,
@@ -163,8 +186,9 @@ export default function TurnosTab({
           style={{
             background: 'white',
             borderRadius: 20,
-            padding: 20,
+            padding: 22,
             border: '1px solid #e5e7eb',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.06)',
           }}
         >
           No hay turnos cargados.
@@ -172,10 +196,19 @@ export default function TurnosTab({
       )}
 
       {Object.entries(groupedSlots).map(([dateKey, daySlots]) => (
-        <div key={dateKey} style={{ marginBottom: 22 }}>
-          <h2 style={{ marginBottom: 10, fontSize: 22 }}>{formatDate(dateKey)}</h2>
+        <div key={dateKey} style={{ marginBottom: 28 }}>
+          <h2
+            style={{
+              marginBottom: 14,
+              fontSize: 22,
+              fontWeight: 800,
+              color: '#0f172a',
+            }}
+          >
+            {formatDate(dateKey)}
+          </h2>
 
-          <div style={{ display: 'grid', gap: 12 }}>
+          <div style={{ display: 'grid', gap: 14 }}>
             {daySlots.map((slot) => {
               const isFull = slot.activePlayers.length >= MAX_PLAYERS;
               const hasMatch = !!slot.match;
@@ -187,23 +220,44 @@ export default function TurnosTab({
                   key={slot.id}
                   style={{
                     background: 'white',
-                    borderRadius: 18,
-                    padding: 16,
+                    borderRadius: 20,
+                    padding: 18,
                     border: '1px solid #e5e7eb',
+                    boxShadow: '0 2px 8px rgba(15, 23, 42, 0.05)',
                   }}
                 >
                   <div
                     style={{
                       display: 'flex',
                       justifyContent: 'space-between',
-                      gap: 8,
-                      alignItems: 'center',
+                      gap: 10,
+                      alignItems: 'flex-start',
                       flexWrap: 'wrap',
+                      marginBottom: 14,
                     }}
                   >
-                    <div style={{ fontSize: 24, fontWeight: 700 }}>{slot.time}</div>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 28,
+                          fontWeight: 800,
+                          color: '#0f172a',
+                          lineHeight: 1,
+                        }}
+                      >
+                        {slot.time}
+                      </div>
+                    </div>
 
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 8,
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        justifyContent: 'flex-end',
+                      }}
+                    >
                       <div
                         style={{
                           padding: '6px 10px',
@@ -269,13 +323,8 @@ export default function TurnosTab({
                         <button
                           onClick={() => sendWhatsAppReminder(slot.id)}
                           style={{
-                            padding: '8px 10px',
-                            borderRadius: 10,
-                            border: 'none',
+                            ...primaryButtonStyle,
                             background: '#16a34a',
-                            color: 'white',
-                            cursor: 'pointer',
-                            fontWeight: 700,
                           }}
                         >
                           Copy WhatsApp Reminder
@@ -290,13 +339,7 @@ export default function TurnosTab({
                               slotId: slot.id,
                             }).then(() => loadData())
                           }
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: 10,
-                            border: '1px solid #d1d5db',
-                            background: 'white',
-                            cursor: 'pointer',
-                          }}
+                          style={secondaryButtonStyle}
                         >
                           Borrar turno
                         </button>
@@ -307,9 +350,9 @@ export default function TurnosTab({
                   <div
                     style={{
                       display: 'flex',
-                      gap: 8,
-                      marginTop: 12,
-                      marginBottom: 12,
+                      gap: 10,
+                      marginTop: 4,
+                      marginBottom: 18,
                       flexWrap: 'wrap',
                     }}
                   >
@@ -324,23 +367,21 @@ export default function TurnosTab({
                       data-form-type="other"
                       style={{
                         flex: 1,
-                        minWidth: 180,
-                        padding: '10px 12px',
-                        borderRadius: 12,
+                        minWidth: 220,
+                        padding: '14px 14px',
+                        borderRadius: 14,
                         border: '1px solid #d1d5db',
+                        fontSize: 15,
+                        minHeight: 48,
+                        background: '#fff',
                       }}
                     />
 
                     <button
                       onClick={() => addPlayer(slot.id)}
                       style={{
-                        padding: '10px 14px',
-                        borderRadius: 12,
-                        border: 'none',
+                        ...primaryButtonStyle,
                         background: '#111827',
-                        color: 'white',
-                        cursor: 'pointer',
-                        fontWeight: 700,
                       }}
                     >
                       {isFull ? 'Lista de espera' : 'Anotar'}
@@ -350,13 +391,8 @@ export default function TurnosTab({
                       <button
                         onClick={() => openNewResultModal(slot.id)}
                         style={{
-                          padding: '10px 14px',
-                          borderRadius: 12,
-                          border: 'none',
+                          ...primaryButtonStyle,
                           background: '#0f766e',
-                          color: 'white',
-                          cursor: 'pointer',
-                          fontWeight: 700,
                         }}
                       >
                         {adminUnlocked ? 'Subir resultado' : 'Cargar resultado'}
@@ -366,15 +402,7 @@ export default function TurnosTab({
                     {hasMatch && (
                       <button
                         onClick={() => openEditResultModal(slot.id)}
-                        style={{
-                          padding: '10px 14px',
-                          borderRadius: 12,
-                          border: '1px solid #d1d5db',
-                          background: 'white',
-                          color: '#111827',
-                          cursor: 'pointer',
-                          fontWeight: 700,
-                        }}
+                        style={secondaryButtonStyle}
                       >
                         Ver resultado
                       </button>
@@ -385,13 +413,8 @@ export default function TurnosTab({
                         <button
                           onClick={() => openEditResultModal(slot.id)}
                           style={{
-                            padding: '10px 14px',
-                            borderRadius: 12,
-                            border: 'none',
+                            ...primaryButtonStyle,
                             background: '#7c3aed',
-                            color: 'white',
-                            cursor: 'pointer',
-                            fontWeight: 700,
                           }}
                         >
                           Editar resultado
@@ -400,13 +423,8 @@ export default function TurnosTab({
                         <button
                           onClick={() => deleteResult(slot.id)}
                           style={{
-                            padding: '10px 14px',
-                            borderRadius: 12,
-                            border: 'none',
+                            ...primaryButtonStyle,
                             background: '#b91c1c',
-                            color: 'white',
-                            cursor: 'pointer',
-                            fontWeight: 700,
                           }}
                         >
                           Borrar resultado
@@ -415,13 +433,22 @@ export default function TurnosTab({
                     )}
                   </div>
 
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Jugadores</div>
+                  <div style={{ marginBottom: 14 }}>
+                    <div
+                      style={{
+                        fontWeight: 800,
+                        marginBottom: 10,
+                        fontSize: 16,
+                        color: '#0f172a',
+                      }}
+                    >
+                      Jugadores
+                    </div>
 
                     {slot.activePlayers.length === 0 ? (
                       <div style={{ color: '#64748b' }}>Todavía no hay jugadores anotados.</div>
                     ) : (
-                      <div style={{ display: 'grid', gap: 8 }}>
+                      <div style={{ display: 'grid', gap: 10 }}>
                         {slot.activePlayers.map((p, index) => {
                           const stats = rankingStats.get(p.name.trim().toLowerCase());
                           const paymentBadge = getPaymentBadge(p);
@@ -431,11 +458,11 @@ export default function TurnosTab({
                               key={p.id}
                               style={{
                                 border: '1px solid #e5e7eb',
-                                borderRadius: 14,
-                                padding: 12,
+                                borderRadius: 16,
+                                padding: 14,
                                 display: 'flex',
                                 justifyContent: 'space-between',
-                                gap: 8,
+                                gap: 10,
                                 alignItems: 'center',
                                 flexWrap: 'wrap',
                                 background: '#f8fafc',
@@ -448,10 +475,16 @@ export default function TurnosTab({
                                     gap: 8,
                                     alignItems: 'center',
                                     flexWrap: 'wrap',
-                                    marginBottom: 4,
+                                    marginBottom: 6,
                                   }}
                                 >
-                                  <div style={{ fontWeight: 700 }}>
+                                  <div
+                                    style={{
+                                      fontWeight: 800,
+                                      fontSize: 15,
+                                      color: '#111827',
+                                    }}
+                                  >
                                     {index + 1}. {p.name}
                                   </div>
 
@@ -478,7 +511,7 @@ export default function TurnosTab({
                                     : 'Sin ranking'}
                                 </div>
 
-                                <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>
+                                <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
                                   {formatPaymentDetail(p)}
                                 </div>
 
@@ -487,7 +520,7 @@ export default function TurnosTab({
                                     style={{
                                       fontSize: 12,
                                       color: '#92400e',
-                                      marginTop: 4,
+                                      marginTop: 5,
                                     }}
                                   >
                                     Note: {p.latestReportedPayment.notes}
@@ -499,13 +532,7 @@ export default function TurnosTab({
                                 {p.paymentVisualStatus === 'unpaid' && (
                                   <button
                                     onClick={() => openReportPaymentModal(slot.id, p.id)}
-                                    style={{
-                                      padding: '8px 10px',
-                                      borderRadius: 10,
-                                      border: '1px solid #d1d5db',
-                                      background: 'white',
-                                      cursor: 'pointer',
-                                    }}
+                                    style={secondaryButtonStyle}
                                   >
                                     Report Payment
                                   </button>
@@ -513,13 +540,7 @@ export default function TurnosTab({
 
                                 <button
                                   onClick={() => removePlayer(p.id)}
-                                  style={{
-                                    padding: '8px 10px',
-                                    borderRadius: 10,
-                                    border: '1px solid #d1d5db',
-                                    background: 'white',
-                                    cursor: 'pointer',
-                                  }}
+                                  style={secondaryButtonStyle}
                                 >
                                   Borrarme
                                 </button>
@@ -534,23 +555,34 @@ export default function TurnosTab({
                   {hasMatch && slot.match && (
                     <div
                       style={{
-                        marginTop: 12,
+                        marginTop: 16,
                         borderTop: '1px solid #e5e7eb',
-                        paddingTop: 12,
+                        paddingTop: 14,
                         background: '#f8fafc',
-                        borderRadius: 12,
+                        borderRadius: 14,
+                        paddingInline: 14,
+                        paddingBottom: 14,
                       }}
                     >
-                      <div style={{ fontWeight: 700, marginBottom: 6 }}>Resultado</div>
-                      <div style={{ color: '#334155', marginBottom: 4 }}>
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          marginBottom: 8,
+                          fontSize: 15,
+                          color: '#0f172a',
+                        }}
+                      >
+                        Resultado
+                      </div>
+                      <div style={{ color: '#334155', marginBottom: 4, fontSize: 14 }}>
                         A: {playerNameById(rankingPlayers, slot.match.team_a_player_1_id)} /{' '}
                         {playerNameById(rankingPlayers, slot.match.team_a_player_2_id)}
                       </div>
-                      <div style={{ color: '#334155', marginBottom: 4 }}>
+                      <div style={{ color: '#334155', marginBottom: 6, fontSize: 14 }}>
                         B: {playerNameById(rankingPlayers, slot.match.team_b_player_1_id)} /{' '}
                         {playerNameById(rankingPlayers, slot.match.team_b_player_2_id)}
                       </div>
-                      <div style={{ fontWeight: 700 }}>
+                      <div style={{ fontWeight: 800, fontSize: 14 }}>
                         Score:{' '}
                         {slot.match.set1_a != null ||
                         slot.match.set2_a != null ||
@@ -567,7 +599,7 @@ export default function TurnosTab({
                           : ''}
                       </div>
                       {slot.match.submitted_by_player_id && (
-                        <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>
+                        <div style={{ marginTop: 8, color: '#64748b', fontSize: 13 }}>
                           Cargado por:{' '}
                           {playerNameById(rankingPlayers, slot.match.submitted_by_player_id)}
                         </div>
@@ -576,9 +608,18 @@ export default function TurnosTab({
                   )}
 
                   {slot.waitlistPlayers.length > 0 && (
-                    <div style={{ marginTop: 14 }}>
-                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Lista de espera</div>
-                      <div style={{ display: 'grid', gap: 8 }}>
+                    <div style={{ marginTop: 18 }}>
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          marginBottom: 10,
+                          fontSize: 16,
+                          color: '#0f172a',
+                        }}
+                      >
+                        Lista de espera
+                      </div>
+                      <div style={{ display: 'grid', gap: 10 }}>
                         {slot.waitlistPlayers.map((p, index) => {
                           const stats = rankingStats.get(p.name.trim().toLowerCase());
                           const paymentBadge = getPaymentBadge(p);
@@ -588,11 +629,11 @@ export default function TurnosTab({
                               key={p.id}
                               style={{
                                 border: '1px dashed #cbd5e1',
-                                borderRadius: 14,
-                                padding: 12,
+                                borderRadius: 16,
+                                padding: 14,
                                 display: 'flex',
                                 justifyContent: 'space-between',
-                                gap: 8,
+                                gap: 10,
                                 alignItems: 'center',
                                 flexWrap: 'wrap',
                                 background: '#f8fafc',
@@ -605,10 +646,16 @@ export default function TurnosTab({
                                     gap: 8,
                                     alignItems: 'center',
                                     flexWrap: 'wrap',
-                                    marginBottom: 4,
+                                    marginBottom: 6,
                                   }}
                                 >
-                                  <div style={{ fontWeight: 700 }}>
+                                  <div
+                                    style={{
+                                      fontWeight: 800,
+                                      fontSize: 15,
+                                      color: '#111827',
+                                    }}
+                                  >
                                     {MAX_PLAYERS + index + 1}. {p.name}
                                   </div>
 
@@ -635,7 +682,7 @@ export default function TurnosTab({
                                     : 'En espera · Sin ranking'}
                                 </div>
 
-                                <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>
+                                <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
                                   {formatPaymentDetail(p)}
                                 </div>
                               </div>
@@ -644,13 +691,7 @@ export default function TurnosTab({
                                 {p.paymentVisualStatus === 'unpaid' && (
                                   <button
                                     onClick={() => openReportPaymentModal(slot.id, p.id)}
-                                    style={{
-                                      padding: '8px 10px',
-                                      borderRadius: 10,
-                                      border: '1px solid #d1d5db',
-                                      background: 'white',
-                                      cursor: 'pointer',
-                                    }}
+                                    style={secondaryButtonStyle}
                                   >
                                     Report Payment
                                   </button>
@@ -658,13 +699,7 @@ export default function TurnosTab({
 
                                 <button
                                   onClick={() => removePlayer(p.id)}
-                                  style={{
-                                    padding: '8px 10px',
-                                    borderRadius: 10,
-                                    border: '1px solid #d1d5db',
-                                    background: 'white',
-                                    cursor: 'pointer',
-                                  }}
+                                  style={secondaryButtonStyle}
                                 >
                                   Borrarme
                                 </button>
@@ -679,14 +714,23 @@ export default function TurnosTab({
                   {adminUnlocked && reportedPayments.length > 0 && (
                     <div
                       style={{
-                        marginTop: 14,
-                        paddingTop: 12,
+                        marginTop: 18,
+                        paddingTop: 14,
                         borderTop: '1px solid #e5e7eb',
                       }}
                     >
-                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Payments reported</div>
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          marginBottom: 10,
+                          fontSize: 16,
+                          color: '#0f172a',
+                        }}
+                      >
+                        Payments reported
+                      </div>
 
-                      <div style={{ display: 'grid', gap: 8 }}>
+                      <div style={{ display: 'grid', gap: 10 }}>
                         {reportedPayments.map((payment) => {
                           const payerName =
                             slot.allPlayers.find((p) => p.id === payment.payer_player_id)?.name ||
@@ -697,28 +741,34 @@ export default function TurnosTab({
                               key={payment.id}
                               style={{
                                 border: '1px solid #fde68a',
-                                borderRadius: 12,
-                                padding: 12,
+                                borderRadius: 14,
+                                padding: 14,
                                 background: '#fffbeb',
                                 display: 'flex',
                                 justifyContent: 'space-between',
-                                gap: 8,
+                                gap: 10,
                                 alignItems: 'center',
                                 flexWrap: 'wrap',
                               }}
                             >
-                              <div>
-                                <div style={{ fontWeight: 700 }}>
+                              <div style={{ flex: 1, minWidth: 220 }}>
+                                <div
+                                  style={{
+                                    fontWeight: 800,
+                                    color: '#78350f',
+                                    fontSize: 14,
+                                  }}
+                                >
                                   {payerName} reportó pago via{' '}
                                   {payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle'}
                                 </div>
 
-                                <div style={{ fontSize: 13, color: '#92400e', marginTop: 4 }}>
+                                <div style={{ fontSize: 13, color: '#92400e', marginTop: 5 }}>
                                   Estado: {payment.status}
                                 </div>
 
                                 {payment.notes && (
-                                  <div style={{ fontSize: 13, color: '#92400e', marginTop: 4 }}>
+                                  <div style={{ fontSize: 13, color: '#92400e', marginTop: 5 }}>
                                     Note: {payment.notes}
                                   </div>
                                 )}
@@ -728,13 +778,8 @@ export default function TurnosTab({
                                 <button
                                   onClick={() => approvePayment(payment.id)}
                                   style={{
-                                    padding: '8px 10px',
-                                    borderRadius: 10,
-                                    border: 'none',
+                                    ...primaryButtonStyle,
                                     background: '#166534',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    fontWeight: 700,
                                   }}
                                 >
                                   Approve
@@ -743,13 +788,8 @@ export default function TurnosTab({
                                 <button
                                   onClick={() => rejectPayment(payment.id)}
                                   style={{
-                                    padding: '8px 10px',
-                                    borderRadius: 10,
-                                    border: 'none',
+                                    ...primaryButtonStyle,
                                     background: '#b45309',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    fontWeight: 700,
                                   }}
                                 >
                                   Reject
