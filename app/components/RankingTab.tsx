@@ -52,7 +52,7 @@ export default function RankingTab({
       style={{
         background: 'white',
         borderRadius: 24,
-        padding: 24,
+        padding: '20px 14px 28px',
         border: '1px solid #e5e7eb',
         overflowX: 'auto',
         boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)',
@@ -69,7 +69,7 @@ export default function RankingTab({
         }}
       >
         <div>
-          <h2 style={{ margin: 0, fontSize: 24 }}>Ranking</h2>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Ranking</h2>
           <div style={{ marginTop: 6, color: '#64748b', fontSize: 14 }}>
             Puntos = ranking del sistema
           </div>
@@ -105,11 +105,13 @@ export default function RankingTab({
           value={myPlayerName}
           onChange={(e) => handleSelectMyPlayer(e.target.value)}
           style={{
-            padding: '10px 12px',
+            padding: '12px 14px',
             borderRadius: 12,
             border: '1px solid #d1d5db',
             background: 'white',
             minWidth: 220,
+            fontSize: 15,
+            minHeight: 48,
           }}
         >
           <option value="">Elegir jugador</option>
@@ -126,12 +128,14 @@ export default function RankingTab({
           <button
             onClick={clearMyPlayer}
             style={{
-              padding: '10px 14px',
+              padding: '12px 14px',
               borderRadius: 12,
               border: '1px solid #d1d5db',
               background: 'white',
               cursor: 'pointer',
               fontWeight: 700,
+              minHeight: 48,
+              fontSize: 14,
             }}
           >
             Cambiar
@@ -143,55 +147,49 @@ export default function RankingTab({
         <div
           style={{
             marginBottom: 18,
-            padding: 16,
-            borderRadius: 18,
-            background: '#eff6ff',
-            border: '1px solid #bfdbfe',
+            padding: 18,
+            borderRadius: 20,
+            background: '#1d4ed8',
+            color: 'white',
             display: 'flex',
-            flexWrap: 'wrap',
-            gap: 12,
-            alignItems: 'center',
+            flexDirection: 'column',
+            gap: 10,
           }}
         >
-          <div style={{ fontWeight: 800, color: '#1e3a8a' }}>
-            Vos estás #{myRankingSummary.position}
+          <div style={{ fontWeight: 800, fontSize: 18 }}>
+            #{myRankingSummary.position} en el ranking
           </div>
-          <div
-            style={{
-              padding: '6px 10px',
-              borderRadius: 999,
-              background: '#1d4ed8',
-              color: 'white',
-              fontWeight: 800,
-              fontSize: 13,
-            }}
-          >
-            {Math.round(Number(myRankingSummary.player.display_rating))} pts
-          </div>
-          <div style={{ color: '#334155', fontWeight: 700 }}>
-            {myRankingSummary.player.wins}G - {myRankingSummary.player.losses}P
-          </div>
-          <div style={{ color: '#334155', fontWeight: 700 }}>
-            {Number(myRankingSummary.player.win_pct).toFixed(2)}%
-          </div>
-          <div
-            style={{
-              padding: '5px 10px',
-              borderRadius: 999,
-              fontSize: 12,
-              fontWeight: 800,
-              background:
-                myRankingSummary.player.current_win_streak > 0 ? '#fff7ed' : '#f8fafc',
-              color:
-                myRankingSummary.player.current_win_streak > 0 ? '#c2410c' : '#64748b',
-              border: `1px solid ${
-                myRankingSummary.player.current_win_streak > 0 ? '#fdba74' : '#e2e8f0'
-              }`,
-            }}
-          >
-            {myRankingSummary.player.current_win_streak > 0
-              ? `🔥 ${myRankingSummary.player.current_win_streak}`
-              : 'Racha 0'}
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                background: 'rgba(255,255,255,0.15)',
+                padding: '6px 10px',
+                borderRadius: 999,
+                fontWeight: 800,
+              }}
+            >
+              {Math.round(Number(myRankingSummary.player.display_rating))} pts
+            </div>
+
+            <div style={{ fontWeight: 700 }}>
+              {myRankingSummary.player.wins}G - {myRankingSummary.player.losses}P
+            </div>
+
+            <div style={{ fontWeight: 700 }}>
+              {Number(myRankingSummary.player.win_pct).toFixed(2)}%
+            </div>
+
+            <div
+              style={{
+                background: 'rgba(255,255,255,0.15)',
+                padding: '5px 10px',
+                borderRadius: 999,
+                fontWeight: 800,
+              }}
+            >
+              🔥 {myRankingSummary.player.current_win_streak || 0}
+            </div>
           </div>
         </div>
       )}
@@ -228,11 +226,13 @@ export default function RankingTab({
             value={chartPlayerName}
             onChange={(e) => setSelectedChartPlayer(e.target.value)}
             style={{
-              padding: '10px 12px',
+              padding: '12px 14px',
               borderRadius: 12,
               border: '1px solid #d1d5db',
               background: 'white',
               minWidth: 220,
+              fontSize: 15,
+              minHeight: 48,
             }}
           >
             {[...rankingPlayers]
@@ -309,8 +309,9 @@ export default function RankingTab({
                 height: 'auto',
                 display: 'block',
                 background: '#f8fafc',
-                borderRadius: 16,
+                borderRadius: 20,
                 border: '1px solid #e2e8f0',
+                padding: 6,
               }}
             >
               {chartGeometry.gridYs.map((y, i) => (
@@ -374,27 +375,36 @@ export default function RankingTab({
         )}
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
+      <table
+        style={{
+          width: '100%',
+          borderCollapse: 'separate',
+          borderSpacing: 0,
+          minWidth: 720,
+        }}
+      >
         <thead>
           <tr>
-            {['#', 'Jugador', 'Puntos', 'PJ', 'G', 'P', '%', 'Prov.', 'Racha', 'Mejor'].map((label) => (
-              <th
-                key={label}
-                style={{
-                  textAlign: 'left',
-                  padding: '14px 12px',
-                  fontSize: 13,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  color: '#475569',
-                  background: '#f8fafc',
-                  borderTop: '1px solid #e5e7eb',
-                  borderBottom: '1px solid #e5e7eb',
-                }}
-              >
-                {label}
-              </th>
-            ))}
+            {['#', 'Jugador', 'Puntos', 'PJ', 'G', 'P', '%', 'Prov.', 'Racha', 'Mejor'].map(
+              (label) => (
+                <th
+                  key={label}
+                  style={{
+                    textAlign: 'left',
+                    padding: '14px 12px',
+                    fontSize: 13,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    color: '#475569',
+                    background: '#f8fafc',
+                    borderTop: '1px solid #e5e7eb',
+                    borderBottom: '1px solid #e5e7eb',
+                  }}
+                >
+                  {label}
+                </th>
+              )
+            )}
           </tr>
         </thead>
 
@@ -415,7 +425,7 @@ export default function RankingTab({
                 p.name.trim().toLowerCase() === chartPlayerName.trim().toLowerCase();
 
               const rowBg = isMe
-                ? '#eff6ff'
+                ? '#dbeafe'
                 : idx === 0
                 ? '#fffbea'
                 : idx === 1
@@ -434,6 +444,7 @@ export default function RankingTab({
                     background: rowBg,
                     cursor: 'pointer',
                     boxShadow: isChartPlayer ? 'inset 0 0 0 2px #93c5fd' : undefined,
+                    borderLeft: isMe ? '4px solid #2563eb' : undefined,
                   }}
                 >
                   <td
@@ -457,9 +468,9 @@ export default function RankingTab({
                       {isMe && (
                         <span
                           style={{
-                            padding: '4px 8px',
+                            padding: '5px 10px',
                             borderRadius: 999,
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: 800,
                             background: '#1d4ed8',
                             color: 'white',
