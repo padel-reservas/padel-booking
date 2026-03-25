@@ -36,8 +36,8 @@ type Props = {
   chartGeometry: ChartGeometry;
 };
 
-const COL_RANK_WIDTH = 64;
-const COL_PLAYER_WIDTH = 190;
+const COL_RANK_WIDTH = 44;
+const COL_PLAYER_WIDTH = 140;
 
 export default function RankingTab({
   rankingPlayers,
@@ -384,7 +384,7 @@ export default function RankingTab({
             width: '100%',
             borderCollapse: 'separate',
             borderSpacing: 0,
-            minWidth: 900,
+            minWidth: 780,
             tableLayout: 'fixed',
           }}
         >
@@ -503,40 +503,39 @@ export default function RankingTab({
                       }}
                     >
                       <div
-                        style={{
-                          fontWeight: 800,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        <span
-                          style={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {p.name}
-                        </span>
-                        {isMe && (
-                          <span
-                            style={{
-                              padding: '5px 10px',
-                              borderRadius: 999,
-                              fontSize: 12,
-                              fontWeight: 800,
-                              background: '#1d4ed8',
-                              color: 'white',
-                              flexShrink: 0,
-                            }}
-                          >
-                            Vos
-                          </span>
-                        )}
-                      </div>
+  style={{
+    fontWeight: 800,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+  }}
+>
+  <span
+    style={{
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+    }}
+  >
+    {p.name}
+  </span>
+  {isMe && (
+    <span
+      style={{
+        padding: '4px 8px',
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 800,
+        background: '#1d4ed8',
+        color: 'white',
+        flexShrink: 0,
+      }}
+    >
+      Vos
+    </span>
+  )}
+</div>
                     </td>
 
                     <td
