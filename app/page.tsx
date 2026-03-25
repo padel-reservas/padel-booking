@@ -1252,7 +1252,7 @@ export default function Page() {
     }}
   >
     <img
-      src="/greenwich-padel-logo.png"
+      src="/logo.png"
       alt="Greenwich Padel"
       style={{
         width: 64,
