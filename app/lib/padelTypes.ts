@@ -8,6 +8,30 @@ export type PaymentMethod = 'venmo' | 'zelle';
 export type PaymentStatus = 'reported' | 'verified' | 'rejected';
 export type PaymentVisualStatus = 'paid' | 'reported' | 'unpaid';
 
+export type SuggestionType = 'availability' | 'need_players' | 'replacement_needed';
+export type SuggestionStatus = 'open' | 'resolved' | 'cancelled';
+
+export type Suggestion = {
+  id: number;
+  author_name: string;
+  type: SuggestionType;
+  message: string;
+  slot_id: number | null;
+  suggested_date: string | null;
+  suggested_time: string | null;
+  is_urgent: boolean;
+  status: SuggestionStatus;
+  created_at: string;
+};
+
+export type NewSuggestionFormState = {
+  authorName: string;
+  type: SuggestionType;
+  message: string;
+  suggestedDate: string;
+  suggestedTime: string;
+};
+
 export type SlotPlayer = {
   id: number;
   slot_id: number;
@@ -115,7 +139,14 @@ export type PlayerRatingHistoryPoint = {
   delta: number;
 };
 
-export type TabKey = 'turnos' | 'ranking' | 'duelo' | 'historial' | 'actividad';
+export type TabKey =
+  | 'turnos'
+  | 'sugerencias'
+  | 'ranking'
+  | 'duelo'
+  | 'historial'
+  | 'actividad';
+
 export type ResultFormMode = 'slot' | 'manual';
 
 export type ResultFormState = {
