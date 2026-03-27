@@ -59,6 +59,14 @@ type SlotWithPlayers = Slot & {
   match: Match | null;
 };
 
+type SuggestionFilter =
+  | 'all'
+  | 'booking'
+  | 'need_players'
+  | 'availability'
+  | 'replacement_needed'
+  | 'with_responses';
+
 function getSuggestionTypeLabel(
   type: 'availability' | 'need_players' | 'replacement_needed'
 ) {
@@ -176,6 +184,8 @@ export default function Page() {
   const [savingSuggestion, setSavingSuggestion] = useState(false);
 
   const [joinSuggestionName, setJoinSuggestionName] = useState<Record<number, string>>({});
+  const [activeSuggestionFilter, setActiveSuggestionFilter] =
+    useState<SuggestionFilter>('all');
 
   const canSeeAdmin = useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -702,19 +712,55 @@ export default function Page() {
     return map;
   }, [suggestionResponses]);
 
+  const getSuggestionResponseCount = (suggestionId: number) =>
+    (responsesBySuggestionId.get(suggestionId) || []).length;
+
+  function matchesSuggestionFilter(s: Suggestion) {
+    const responseCount = getSuggestionResponseCount(s.id);
+
+    if (activeSuggestionFilter === 'all') return true;
+    if (activeSuggestionFilter === 'booking') return s.is_booking_request;
+    if (activeSuggestionFilter === 'need_players') return s.type === 'need_players';
+    if (activeSuggestionFilter === 'availability') return s.type === 'availability';
+    if (activeSuggestionFilter === 'replacement_needed')
+      return s.type === 'replacement_needed';
+    if (activeSuggestionFilter === 'with_responses') return responseCount > 0;
+
+    return true;
+  }
+
+  function sortSuggestionsByPriority(items: Suggestion[]) {
+    return [...items].sort((a, b) => {
+      const responseDiff = getSuggestionResponseCount(b.id) - getSuggestionResponseCount(a.id);
+      if (responseDiff !== 0) return responseDiff;
+
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }
+
   const openSuggestions = useMemo(
     () => suggestions.filter((s) => s.status === 'open'),
     [suggestions]
   );
 
   const urgentSuggestions = useMemo(
-    () => openSuggestions.filter((s) => s.is_urgent),
-    [openSuggestions]
+    () => sortSuggestionsByPriority(openSuggestions.filter((s) => s.is_urgent)),
+    [openSuggestions, suggestionResponses, activeSuggestionFilter]
   );
 
   const regularSuggestions = useMemo(
-    () => openSuggestions.filter((s) => !s.is_urgent),
-    [openSuggestions]
+    () => sortSuggestionsByPriority(openSuggestions.filter((s) => !s.is_urgent)),
+    [openSuggestions, suggestionResponses, activeSuggestionFilter]
+  );
+
+  const filteredUrgentSuggestions = useMemo(
+    () => urgentSuggestions.filter(matchesSuggestionFilter),
+    [urgentSuggestions, activeSuggestionFilter, suggestionResponses]
+  );
+
+  const filteredRegularSuggestions = useMemo(
+    () => regularSuggestions.filter(matchesSuggestionFilter),
+    [regularSuggestions, activeSuggestionFilter, suggestionResponses]
   );
 
   async function addPlayer(slotId: number) {
@@ -1521,6 +1567,27 @@ export default function Page() {
     );
   }
 
+  function suggestionFilterButton(label: string, value: SuggestionFilter) {
+    const active = activeSuggestionFilter === value;
+    return (
+      <button
+        onClick={() => setActiveSuggestionFilter(value)}
+        style={{
+          padding: '8px 12px',
+          borderRadius: 999,
+          border: active ? 'none' : '1px solid #d1d5db',
+          background: active ? '#111827' : 'white',
+          color: active ? 'white' : '#111827',
+          cursor: 'pointer',
+          fontWeight: 700,
+          fontSize: 12,
+        }}
+      >
+        {label}
+      </button>
+    );
+  }
+
   const manualPlayerOptions = [...rankingPlayers].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
@@ -2037,7 +2104,27 @@ export default function Page() {
             </div>
           </div>
 
-          {urgentSuggestions.length > 0 && (
+          <div
+            style={{
+              background: 'white',
+              borderRadius: 20,
+              padding: 20,
+              border: '1px solid #e5e7eb',
+            }}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: 12 }}>Filtros</h2>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {suggestionFilterButton('Todas', 'all')}
+              {suggestionFilterButton('Sacar turno', 'booking')}
+              {suggestionFilterButton('Busco jugadores', 'need_players')}
+              {suggestionFilterButton('Quiero jugar', 'availability')}
+              {suggestionFilterButton('Necesito reemplazo', 'replacement_needed')}
+              {suggestionFilterButton('Con gente sumada', 'with_responses')}
+            </div>
+          </div>
+
+          {filteredUrgentSuggestions.length > 0 && (
             <div
               style={{
                 background: 'white',
@@ -2048,8 +2135,9 @@ export default function Page() {
             >
               <h2 style={{ marginTop: 0, color: '#991b1b' }}>Urgentes</h2>
 
-              {urgentSuggestions.map((s) => {
+              {filteredUrgentSuggestions.map((s) => {
                 const responses = responsesBySuggestionId.get(s.id) || [];
+                const responseCount = responses.length;
                 const effectiveResponderName = getEffectiveResponderName(s.id);
                 const joinedByCurrentUser =
                   !!effectiveResponderName &&
@@ -2068,7 +2156,33 @@ export default function Page() {
                       marginBottom: 12,
                     }}
                   >
-                    <div style={{ fontWeight: 800, color: '#991b1b' }}>🚨 Reemplazo necesario</div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 10,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, color: '#991b1b' }}>
+                        🚨 Reemplazo necesario
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: '#7f1d1d',
+                          background: 'white',
+                          border: '1px solid #fecaca',
+                          borderRadius: 999,
+                          padding: '4px 10px',
+                        }}
+                      >
+                        {responseCount} sumados
+                      </div>
+                    </div>
 
                     <div
                       style={{
@@ -2191,14 +2305,15 @@ export default function Page() {
           >
             <h2 style={{ marginTop: 0 }}>Sugerencias</h2>
 
-            {openSuggestions.length === 0 && (
-              <div style={{ color: '#64748b' }}>No hay sugerencias abiertas todavía.</div>
+            {filteredUrgentSuggestions.length === 0 && filteredRegularSuggestions.length === 0 && (
+              <div style={{ color: '#64748b' }}>No hay sugerencias para ese filtro.</div>
             )}
 
-            {regularSuggestions.map((s) => {
+            {filteredRegularSuggestions.map((s) => {
               const isBooking = s.is_booking_request;
               const typeLabel = getSuggestionTypeLabel(s.type);
               const responses = responsesBySuggestionId.get(s.id) || [];
+              const responseCount = responses.length;
               const effectiveResponderName = getEffectiveResponderName(s.id);
               const joinedByCurrentUser =
                 !!effectiveResponderName &&
@@ -2217,22 +2332,48 @@ export default function Page() {
                     marginBottom: 12,
                   }}
                 >
-                  {isBooking && (
-                    <div style={{ fontWeight: 800, color: '#9a3412', marginBottom: 6 }}>
-                      SACAR TURNO
-                    </div>
-                  )}
-
                   <div
                     style={{
-                      fontWeight: 800,
-                      color: '#374151',
-                      marginBottom: 6,
-                      fontSize: 13,
-                      letterSpacing: 0.3,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 10,
+                      flexWrap: 'wrap',
                     }}
                   >
-                    {typeLabel}
+                    <div>
+                      {isBooking && (
+                        <div style={{ fontWeight: 800, color: '#9a3412', marginBottom: 6 }}>
+                          SACAR TURNO
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          color: '#374151',
+                          marginBottom: 6,
+                          fontSize: 13,
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        {typeLabel}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 800,
+                        color: '#374151',
+                        background: 'white',
+                        border: '1px solid #d1d5db',
+                        borderRadius: 999,
+                        padding: '4px 10px',
+                      }}
+                    >
+                      {responseCount} sumados
+                    </div>
                   </div>
 
                   {s.booking_status === 'not_available' && (
