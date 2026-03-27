@@ -13,6 +13,7 @@ import ReportPaymentModal from './components/ReportPaymentModal';
 import WhatsAppReminderModal from './components/WhatsAppReminderModal';
 import Image from 'next/image';
 import logoDisplay from './logo-display.png';
+import { APP_VERSION } from './lib/appVersion';
 
 import type {
   ActivityMatch,
@@ -1281,6 +1282,21 @@ export default function Page() {
       <p style={{ marginTop: 6, marginBottom: 0, color: '#64748b' }}>
         Turnos, ranking e historial en una sola app.
       </p>
+      <div
+  style={{
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: 700,
+    color: '#64748b',
+    background: '#f8fafc',
+    border: '1px solid #e5e7eb',
+    borderRadius: 999,
+    padding: '4px 10px',
+    display: 'inline-block',
+  }}
+>
+  {APP_VERSION}
+</div>
     </div>
   </div>
 
