@@ -51,18 +51,6 @@ async function validateSubmitterForSlot(slotId: number, submittedByPlayerId: num
   }
 }
 
-function normalizePaymentMethod(raw: unknown): 'venmo' | 'zelle' | null {
-  const value = String(raw || '')
-    .trim()
-    .toLowerCase();
-
-  if (value === 'venmo' || value === 'zelle') {
-    return value;
-  }
-
-  return null;
-}
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -234,20 +222,11 @@ export async function POST(req: Request) {
     }
 
     if (action === 'markPaidDirect') {
-      const { slotId, playerId, paymentMethod } = body;
+      const { slotId, playerId } = body;
 
       if (!slotId || !playerId) {
         return NextResponse.json(
           { error: 'Faltan slotId o playerId para marcar pago directo' },
-          { status: 400 }
-        );
-      }
-
-      const normalizedMethod = normalizePaymentMethod(paymentMethod);
-
-      if (!normalizedMethod) {
-        return NextResponse.json(
-          { error: 'paymentMethod inválido. Debe ser venmo o zelle' },
           { status: 400 }
         );
       }
@@ -257,11 +236,11 @@ export async function POST(req: Request) {
       const { error: paymentError } = await supabase.from('payments').insert({
         slot_id: slotId,
         payer_player_id: playerId,
-        payment_method: normalizedMethod,
         status: 'paid',
         reported_at: now,
         approved_at: now,
-        notes: 'Marked paid by admin',
+        approved_by: 'admin',
+        notes: 'Marked paid manually by admin',
       });
 
       if (paymentError) {
