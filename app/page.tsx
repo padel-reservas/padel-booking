@@ -183,6 +183,14 @@ export default function Page() {
     return params.get('admin') === '1';
   }, []);
 
+  function normalizeName(value: string) {
+    return value.trim().toLowerCase();
+  }
+
+  function getEffectiveResponderName(suggestionId: number) {
+    return myPlayerName.trim() || (joinSuggestionName[suggestionId] || '').trim();
+  }
+
   async function loadData() {
     setLoading(true);
 
@@ -868,10 +876,10 @@ export default function Page() {
   }
 
   async function joinSuggestion(suggestionId: number) {
-    const name = (joinSuggestionName[suggestionId] || '').trim();
+    const name = getEffectiveResponderName(suggestionId);
 
     if (!name) {
-      alert('Poné tu nombre para sumarte.');
+      alert('Elegí tu jugador en Ranking o escribí tu nombre para sumarte.');
       return;
     }
 
@@ -881,7 +889,8 @@ export default function Page() {
     });
 
     if (error) {
-      if (error.message.toLowerCase().includes('duplicate') || error.message.toLowerCase().includes('unique')) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('duplicate') || msg.includes('unique')) {
         alert('Ese nombre ya se sumó a esta sugerencia.');
       } else {
         alert(`No se pudo sumar: ${error.message}`);
@@ -893,7 +902,14 @@ export default function Page() {
     await loadData();
   }
 
-  async function leaveSuggestion(suggestionId: number, responderName: string) {
+  async function leaveSuggestion(suggestionId: number) {
+    const responderName = getEffectiveResponderName(suggestionId);
+
+    if (!responderName) {
+      alert('No se encontró el nombre para salir de la sugerencia.');
+      return;
+    }
+
     const { error } = await supabase
       .from('suggestion_responses')
       .delete()
@@ -2032,6 +2048,12 @@ export default function Page() {
 
               {urgentSuggestions.map((s) => {
                 const responses = responsesBySuggestionId.get(s.id) || [];
+                const effectiveResponderName = getEffectiveResponderName(s.id);
+                const joinedByCurrentUser =
+                  !!effectiveResponderName &&
+                  responses.some(
+                    (r) => normalizeName(r.responder_name) === normalizeName(effectiveResponderName)
+                  );
 
                 return (
                   <div
@@ -2071,35 +2093,69 @@ export default function Page() {
                     )}
 
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                      <input
-                        type="text"
-                        value={joinSuggestionName[s.id] || ''}
-                        onChange={(e) =>
-                          setJoinSuggestionName((prev) => ({ ...prev, [s.id]: e.target.value }))
-                        }
-                        placeholder="Tu nombre"
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 10,
-                          border: '1px solid #d1d5db',
-                          minWidth: 160,
-                        }}
-                      />
+                      {!myPlayerName && (
+                        <input
+                          type="text"
+                          value={joinSuggestionName[s.id] || ''}
+                          onChange={(e) =>
+                            setJoinSuggestionName((prev) => ({ ...prev, [s.id]: e.target.value }))
+                          }
+                          placeholder="Tu nombre"
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: '1px solid #d1d5db',
+                            minWidth: 160,
+                          }}
+                        />
+                      )}
+
+                      {myPlayerName && (
+                        <div
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: '1px solid #d1d5db',
+                            background: 'white',
+                            fontWeight: 700,
+                            color: '#374151',
+                          }}
+                        >
+                          Actuás como: {myPlayerName}
+                        </div>
+                      )}
 
                       <button
                         onClick={() => joinSuggestion(s.id)}
+                        disabled={joinedByCurrentUser}
                         style={{
                           padding: '10px 12px',
                           borderRadius: 10,
                           border: 'none',
-                          background: '#111827',
+                          background: joinedByCurrentUser ? '#9ca3af' : '#111827',
                           color: 'white',
-                          cursor: 'pointer',
+                          cursor: joinedByCurrentUser ? 'default' : 'pointer',
                           fontWeight: 700,
                         }}
                       >
-                        Me sumo
+                        {joinedByCurrentUser ? 'Ya me sumé' : 'Me sumo'}
                       </button>
+
+                      {joinedByCurrentUser && (
+                        <button
+                          onClick={() => leaveSuggestion(s.id)}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: '1px solid #d1d5db',
+                            background: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                        >
+                          Salir
+                        </button>
+                      )}
 
                       <button
                         onClick={() => copySuggestionMessage(s.message)}
@@ -2156,6 +2212,12 @@ export default function Page() {
               const isBooking = s.is_booking_request;
               const typeLabel = getSuggestionTypeLabel(s.type);
               const responses = responsesBySuggestionId.get(s.id) || [];
+              const effectiveResponderName = getEffectiveResponderName(s.id);
+              const joinedByCurrentUser =
+                !!effectiveResponderName &&
+                responses.some(
+                  (r) => normalizeName(r.responder_name) === normalizeName(effectiveResponderName)
+                );
 
               return (
                 <div
@@ -2213,39 +2275,57 @@ export default function Page() {
                   )}
 
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                    <input
-                      type="text"
-                      value={joinSuggestionName[s.id] || ''}
-                      onChange={(e) =>
-                        setJoinSuggestionName((prev) => ({ ...prev, [s.id]: e.target.value }))
-                      }
-                      placeholder="Tu nombre"
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: 10,
-                        border: '1px solid #d1d5db',
-                        minWidth: 160,
-                      }}
-                    />
+                    {!myPlayerName && (
+                      <input
+                        type="text"
+                        value={joinSuggestionName[s.id] || ''}
+                        onChange={(e) =>
+                          setJoinSuggestionName((prev) => ({ ...prev, [s.id]: e.target.value }))
+                        }
+                        placeholder="Tu nombre"
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          border: '1px solid #d1d5db',
+                          minWidth: 160,
+                        }}
+                      />
+                    )}
+
+                    {myPlayerName && (
+                      <div
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          border: '1px solid #d1d5db',
+                          background: 'white',
+                          fontWeight: 700,
+                          color: '#374151',
+                        }}
+                      >
+                        Actuás como: {myPlayerName}
+                      </div>
+                    )}
 
                     <button
                       onClick={() => joinSuggestion(s.id)}
+                      disabled={joinedByCurrentUser}
                       style={{
                         padding: '10px 12px',
                         borderRadius: 10,
                         border: 'none',
-                        background: '#111827',
+                        background: joinedByCurrentUser ? '#9ca3af' : '#111827',
                         color: 'white',
-                        cursor: 'pointer',
+                        cursor: joinedByCurrentUser ? 'default' : 'pointer',
                         fontWeight: 700,
                       }}
                     >
-                      Me sumo
+                      {joinedByCurrentUser ? 'Ya me sumé' : 'Me sumo'}
                     </button>
 
-                    {!!(joinSuggestionName[s.id] || '').trim() && (
+                    {joinedByCurrentUser && (
                       <button
-                        onClick={() => leaveSuggestion(s.id, (joinSuggestionName[s.id] || '').trim())}
+                        onClick={() => leaveSuggestion(s.id)}
                         style={{
                           padding: '10px 12px',
                           borderRadius: 10,
