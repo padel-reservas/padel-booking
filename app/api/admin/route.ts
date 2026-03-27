@@ -51,12 +51,12 @@ async function validateSubmitterForSlot(slotId: number, submittedByPlayerId: num
   }
 }
 
-function normalizePaymentMethod(raw: unknown): 'venmo' | 'zelle' | 'cash' | null {
+function normalizePaymentMethod(raw: unknown): 'venmo' | 'zelle' | null {
   const value = String(raw || '')
     .trim()
     .toLowerCase();
 
-  if (value === 'venmo' || value === 'zelle' || value === 'cash') {
+  if (value === 'venmo' || value === 'zelle') {
     return value;
   }
 
@@ -247,7 +247,7 @@ export async function POST(req: Request) {
 
       if (!normalizedMethod) {
         return NextResponse.json(
-          { error: 'paymentMethod inválido. Debe ser venmo, zelle o cash' },
+          { error: 'paymentMethod inválido. Debe ser venmo o zelle' },
           { status: 400 }
         );
       }
