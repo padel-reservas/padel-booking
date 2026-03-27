@@ -80,12 +80,7 @@ function formatPaymentDetail(player: SlotPlayerWithPaymentUI) {
     const payment = player.latestVerifiedPayment;
     if (!payment) return 'Pago verificado';
 
-    const method =
-      payment.payment_method === 'venmo'
-        ? 'Venmo'
-        : payment.payment_method === 'cash'
-          ? 'Cash'
-          : 'Zelle';
+    const method = payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle';
 
     if (player.paidByPlayerName && player.paidByPlayerName !== player.name) {
       return `Verificado via ${method} · pagó ${player.paidByPlayerName}`;
@@ -98,12 +93,7 @@ function formatPaymentDetail(player: SlotPlayerWithPaymentUI) {
     const payment = player.latestReportedPayment;
     if (!payment) return 'Pago reportado pendiente de validación';
 
-    const method =
-      payment.payment_method === 'venmo'
-        ? 'Venmo'
-        : payment.payment_method === 'cash'
-          ? 'Cash'
-          : 'Zelle';
+    const method = payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle';
 
     if (player.paidByPlayerName && player.paidByPlayerName !== player.name) {
       return `Reportado via ${method} · pagó ${player.paidByPlayerName}`;
@@ -172,7 +162,7 @@ const secondaryButtonStyle: React.CSSProperties = {
 
 function normalizePaymentMethod(method: string) {
   const value = method.trim().toLowerCase();
-  if (value === 'venmo' || value === 'zelle' || value === 'cash') return value;
+  if (value === 'venmo' || value === 'zelle') return value;
   return null;
 }
 
@@ -182,12 +172,12 @@ async function handleDirectMarkPaid(
   slotId: number,
   playerId: number
 ) {
-  const methodInput = window.prompt('Método de pago: venmo, zelle o cash', 'venmo');
+  const methodInput = window.prompt('Método de pago: venmo o zelle', 'venmo');
   if (!methodInput) return;
 
   const paymentMethod = normalizePaymentMethod(methodInput);
   if (!paymentMethod) {
-    window.alert('Método inválido. Usá: venmo, zelle o cash.');
+    window.alert('Método inválido. Usá: venmo o zelle.');
     return;
   }
 
@@ -848,11 +838,7 @@ export default function TurnosTab({
                                   }}
                                 >
                                   {payerName} reportó pago via{' '}
-                                  {payment.payment_method === 'venmo'
-                                    ? 'Venmo'
-                                    : payment.payment_method === 'cash'
-                                      ? 'Cash'
-                                      : 'Zelle'}
+                                  {payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle'}
                                 </div>
 
                                 <div style={{ fontSize: 13, color: '#92400e', marginTop: 5 }}>
