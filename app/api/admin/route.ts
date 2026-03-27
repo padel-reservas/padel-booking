@@ -51,6 +51,18 @@ async function validateSubmitterForSlot(slotId: number, submittedByPlayerId: num
   }
 }
 
+function normalizePaymentMethod(raw: unknown): 'venmo' | 'zelle' | 'cash' | null {
+  const value = String(raw || '')
+    .trim()
+    .toLowerCase();
+
+  if (value === 'venmo' || value === 'zelle' || value === 'cash') {
+    return value;
+  }
+
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -219,6 +231,53 @@ export async function POST(req: Request) {
       }
 
       return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'markPaidDirect') {
+      const { slotId, playerId, paymentMethod } = body;
+
+      if (!slotId || !playerId) {
+        return NextResponse.json(
+          { error: 'Faltan slotId o playerId para marcar pago directo' },
+          { status: 400 }
+        );
+      }
+
+      const normalizedMethod = normalizePaymentMethod(paymentMethod);
+
+      if (!normalizedMethod) {
+        return NextResponse.json(
+          { error: 'paymentMethod inválido. Debe ser venmo, zelle o cash' },
+          { status: 400 }
+        );
+      }
+
+      const now = new Date().toISOString();
+
+      const { error: paymentError } = await supabase.from('payments').insert({
+        slot_id: slotId,
+        payer_player_id: playerId,
+        payment_method: normalizedMethod,
+        status: 'paid',
+        reported_at: now,
+        approved_at: now,
+        notes: 'Marked paid by admin',
+      });
+
+      if (paymentError) {
+        return NextResponse.json({ error: paymentError.message }, { status: 400 });
+      }
+
+      const { error: playerPaidError } = await supabase
+        .from('players')
+        .update({ paid: true })
+        .eq('id', playerId);
+
+      if (playerPaidError) {
+        return NextResponse.json({ error: playerPaidError.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ ok: true, mode: 'marked-paid-direct' });
     }
 
     if (action === 'addRankingPlayer') {
