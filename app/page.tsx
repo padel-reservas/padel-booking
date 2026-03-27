@@ -785,17 +785,26 @@ export default function Page() {
 
   async function createSuggestion() {
     const author = newSuggestionAuthor.trim();
-    const message = newSuggestionMessage.trim();
+    const rawMessage = newSuggestionMessage.trim();
 
     if (!author) {
       alert('Poné tu nombre.');
       return;
     }
 
-    if (!message) {
+    if (newSuggestionIsBooking && (!newSuggestionDate || !newSuggestionTime)) {
+      alert('Para sacar turno, elegí fecha y hora.');
+      return;
+    }
+
+    if (!newSuggestionIsBooking && !rawMessage) {
       alert('Escribí una sugerencia.');
       return;
     }
+
+    const message = newSuggestionIsBooking
+      ? rawMessage || `Sacar turno ${newSuggestionDate} ${newSuggestionTime}`
+      : rawMessage;
 
     setSavingSuggestion(true);
 
@@ -1853,28 +1862,10 @@ export default function Page() {
                 </select>
               </div>
 
-              <div>
-                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>Mensaje</div>
-                <textarea
-                  value={newSuggestionMessage}
-                  onChange={(e) => setNewSuggestionMessage(e.target.value)}
-                  placeholder='Ej: Fernando para jugar mañana después de 6pm, ¿están?'
-                  rows={4}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: 12,
-                    border: '1px solid #d1d5db',
-                    resize: 'vertical',
-                    fontFamily: 'Arial, sans-serif',
-                  }}
-                />
-              </div>
-
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
-                    Fecha (opcional)
+                    Fecha {newSuggestionIsBooking ? '' : '(opcional)'}
                   </div>
                   <input
                     type="date"
@@ -1890,7 +1881,7 @@ export default function Page() {
 
                 <div>
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
-                    Hora (opcional)
+                    Hora {newSuggestionIsBooking ? '' : '(opcional)'}
                   </div>
                   <input
                     type="time"
@@ -1915,6 +1906,30 @@ export default function Page() {
                   />
                   Confirmar sacar turno
                 </label>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                  Mensaje {newSuggestionIsBooking ? '(opcional)' : ''}
+                </div>
+                <textarea
+                  value={newSuggestionMessage}
+                  onChange={(e) => setNewSuggestionMessage(e.target.value)}
+                  placeholder={
+                    newSuggestionIsBooking
+                      ? 'Opcional. Si lo dejás vacío, se genera automáticamente.'
+                      : 'Ej: Fernando para jugar mañana después de 6pm, ¿están?'
+                  }
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid #d1d5db',
+                    resize: 'vertical',
+                    fontFamily: 'Arial, sans-serif',
+                  }}
+                />
               </div>
 
               <div>
