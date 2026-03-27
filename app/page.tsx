@@ -30,6 +30,7 @@ import type {
   Payment,
   PaymentAllocationWithPayment,
   ReportPaymentFormState,
+  Suggestion,
 } from './lib/padelTypes';
 
 import {
@@ -120,6 +121,7 @@ export default function Page() {
   const [rankingPlayers, setRankingPlayers] = useState<RankingPlayer[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [ratingHistory, setRatingHistory] = useState<PlayerRatingHistoryPoint[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
   const [selectedChartPlayer, setSelectedChartPlayer] = useState<string>('');
   const [selectedActivityPlayer, setSelectedActivityPlayer] = useState<string>('');
@@ -168,6 +170,7 @@ export default function Page() {
       { data: rankingPlayersData, error: rankingPlayersError },
       { data: matchesData, error: matchesError },
       { data: ratingHistoryData, error: ratingHistoryError },
+      { data: suggestionsData, error: suggestionsError },
     ] = await Promise.all([
       supabase.from('slots').select('*').order('date').order('time'),
       supabase
@@ -213,6 +216,11 @@ export default function Page() {
         .select('*')
         .order('match_date', { ascending: true })
         .order('match_id', { ascending: true }),
+      supabase
+        .from('suggestions')
+        .select('*')
+        .order('is_urgent', { ascending: false })
+        .order('created_at', { ascending: false }),
     ]);
 
     const firstError =
@@ -220,7 +228,8 @@ export default function Page() {
       slotPlayersError ||
       rankingPlayersError ||
       matchesError ||
-      ratingHistoryError;
+      ratingHistoryError ||
+      suggestionsError;
 
     if (firstError) {
       alert(`Error cargando datos: ${firstError.message}`);
@@ -240,6 +249,7 @@ export default function Page() {
     setRankingPlayers(rankingData);
     setMatches((matchesData || []) as Match[]);
     setRatingHistory((ratingHistoryData || []) as PlayerRatingHistoryPoint[]);
+    setSuggestions((suggestionsData || []) as Suggestion[]);
 
     setSelectedChartPlayer((prev) => {
       if (prev) return prev;
@@ -644,6 +654,21 @@ export default function Page() {
     return slotsWithPlayers.find((slot) => slot.id === selectedPaymentSlotId) || null;
   }, [selectedPaymentSlotId, slotsWithPlayers]);
 
+  const openSuggestions = useMemo(
+    () => suggestions.filter((s) => s.status === 'open'),
+    [suggestions]
+  );
+
+  const urgentSuggestions = useMemo(
+    () => openSuggestions.filter((s) => s.is_urgent),
+    [openSuggestions]
+  );
+
+  const regularSuggestions = useMemo(
+    () => openSuggestions.filter((s) => !s.is_urgent),
+    [openSuggestions]
+  );
+
   async function addPlayer(slotId: number) {
     const rawName = (nameInput[slotId] || '').trim();
 
@@ -680,6 +705,16 @@ export default function Page() {
   }
 
   async function removePlayer(playerId: number) {
+    const player = slotPlayers.find((p) => p.id === playerId);
+    if (!player) return;
+
+    const slot = slotsWithPlayers.find((s) => s.id === player.slot_id);
+
+    const shouldCreateUrgentSuggestion =
+      !!slot && slot.activePlayers.length === 4 && slot.waitlistPlayers.length === 0;
+
+    const removedPlayerName = player.name;
+
     const { error } = await supabase.from('players').delete().eq('id', playerId);
 
     if (error) {
@@ -687,7 +722,26 @@ export default function Page() {
       return;
     }
 
-    loadData();
+    if (shouldCreateUrgentSuggestion && slot) {
+      const message = `${removedPlayerName} se bajó del turno del ${slot.date} a las ${slot.time}. Falta 1 jugador.`;
+
+      const { error: suggestionError } = await supabase.from('suggestions').insert({
+        author_name: 'Sistema',
+        type: 'replacement_needed',
+        message,
+        slot_id: slot.id,
+        suggested_date: slot.date,
+        suggested_time: slot.time,
+        is_urgent: true,
+        status: 'open',
+      });
+
+      if (suggestionError) {
+        alert(`Se borró el jugador, pero no se pudo crear la sugerencia: ${suggestionError.message}`);
+      }
+    }
+
+    await loadData();
   }
 
   async function adminAction(action: any) {
@@ -715,6 +769,34 @@ export default function Page() {
   async function unlockAdmin() {
     const res = await adminAction({ action: 'noop' });
     if (res.ok) setAdminUnlocked(true);
+  }
+
+  async function closeSuggestion(suggestionId: number) {
+    if (!adminUnlocked) {
+      alert('Primero tenés que entrar como admin.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('suggestions')
+      .update({ status: 'resolved' })
+      .eq('id', suggestionId);
+
+    if (error) {
+      alert(`No se pudo cerrar la sugerencia: ${error.message}`);
+      return;
+    }
+
+    await loadData();
+  }
+
+  async function copySuggestionMessage(message: string) {
+    try {
+      await navigator.clipboard.writeText(message);
+      alert('Mensaje copiado');
+    } catch {
+      alert('No se pudo copiar automáticamente. Copialo manualmente.');
+    }
   }
 
   function openNewResultModal(slotId: number) {
@@ -1399,6 +1481,7 @@ export default function Page() {
           </button>
 
           {tabButton('Turnos', 'turnos')}
+          {tabButton('Sugerencias', 'sugerencias')}
           {tabButton('Ranking', 'ranking')}
           {tabButton('Duelo', 'duelo')}
           {tabButton('Historial', 'historial')}
@@ -1616,6 +1699,146 @@ export default function Page() {
           rejectPayment={rejectPayment}
           sendWhatsAppReminder={sendWhatsAppReminder}
         />
+      )}
+
+      {!loading && activeTab === 'sugerencias' && (
+        <div
+          style={{
+            display: 'grid',
+            gap: 16,
+          }}
+        >
+          {urgentSuggestions.length > 0 && (
+            <div
+              style={{
+                background: 'white',
+                borderRadius: 20,
+                padding: 20,
+                border: '1px solid #fecaca',
+              }}
+            >
+              <h2 style={{ marginTop: 0, color: '#991b1b' }}>Urgentes</h2>
+
+              {urgentSuggestions.map((s) => (
+                <div
+                  key={s.id}
+                  style={{
+                    border: '1px solid #fecaca',
+                    background: '#fef2f2',
+                    borderRadius: 14,
+                    padding: 14,
+                    marginBottom: 12,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: '#991b1b' }}>🚨 Reemplazo necesario</div>
+                  <div style={{ marginTop: 8, color: '#111827' }}>{s.message}</div>
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+                    {s.author_name} • {new Date(s.created_at).toLocaleString()}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                    <button
+                      onClick={() => copySuggestionMessage(s.message)}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: '1px solid #d1d5db',
+                        background: 'white',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Copiar mensaje
+                    </button>
+
+                    {adminUnlocked && (
+                      <button
+                        onClick={() => closeSuggestion(s.id)}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          border: 'none',
+                          background: '#111827',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Cerrar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div
+            style={{
+              background: 'white',
+              borderRadius: 20,
+              padding: 20,
+              border: '1px solid #e5e7eb',
+            }}
+          >
+            <h2 style={{ marginTop: 0 }}>Sugerencias</h2>
+
+            {openSuggestions.length === 0 && (
+              <div style={{ color: '#64748b' }}>No hay sugerencias abiertas todavía.</div>
+            )}
+
+            {regularSuggestions.map((s) => (
+              <div
+                key={s.id}
+                style={{
+                  border: '1px solid #e5e7eb',
+                  background: '#f8fafc',
+                  borderRadius: 14,
+                  padding: 14,
+                  marginBottom: 12,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: '#111827' }}>{s.message}</div>
+                <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+                  {s.author_name} • {new Date(s.created_at).toLocaleString()}
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                  <button
+                    onClick={() => copySuggestionMessage(s.message)}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      border: '1px solid #d1d5db',
+                      background: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Copiar mensaje
+                  </button>
+
+                  {adminUnlocked && (
+                    <button
+                      onClick={() => closeSuggestion(s.id)}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: 'none',
+                        background: '#111827',
+                        color: 'white',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Cerrar
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {!loading && activeTab === 'ranking' && (
