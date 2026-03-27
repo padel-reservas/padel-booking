@@ -31,6 +31,7 @@ import type {
   PaymentAllocationWithPayment,
   ReportPaymentFormState,
   Suggestion,
+  SuggestionResponse,
 } from './lib/padelTypes';
 
 import {
@@ -130,6 +131,7 @@ export default function Page() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [ratingHistory, setRatingHistory] = useState<PlayerRatingHistoryPoint[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestionResponses, setSuggestionResponses] = useState<SuggestionResponse[]>([]);
 
   const [selectedChartPlayer, setSelectedChartPlayer] = useState<string>('');
   const [selectedActivityPlayer, setSelectedActivityPlayer] = useState<string>('');
@@ -173,6 +175,8 @@ export default function Page() {
   const [newSuggestionIsBooking, setNewSuggestionIsBooking] = useState(false);
   const [savingSuggestion, setSavingSuggestion] = useState(false);
 
+  const [joinSuggestionName, setJoinSuggestionName] = useState<Record<number, string>>({});
+
   const canSeeAdmin = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
@@ -189,6 +193,7 @@ export default function Page() {
       { data: matchesData, error: matchesError },
       { data: ratingHistoryData, error: ratingHistoryError },
       { data: suggestionsData, error: suggestionsError },
+      { data: suggestionResponsesData, error: suggestionResponsesError },
     ] = await Promise.all([
       supabase.from('slots').select('*').order('date').order('time'),
       supabase
@@ -239,6 +244,10 @@ export default function Page() {
         .select('*')
         .order('is_urgent', { ascending: false })
         .order('created_at', { ascending: false }),
+      supabase
+        .from('suggestion_responses')
+        .select('*')
+        .order('created_at', { ascending: true }),
     ]);
 
     const firstError =
@@ -247,7 +256,8 @@ export default function Page() {
       rankingPlayersError ||
       matchesError ||
       ratingHistoryError ||
-      suggestionsError;
+      suggestionsError ||
+      suggestionResponsesError;
 
     if (firstError) {
       alert(`Error cargando datos: ${firstError.message}`);
@@ -268,6 +278,7 @@ export default function Page() {
     setMatches((matchesData || []) as Match[]);
     setRatingHistory((ratingHistoryData || []) as PlayerRatingHistoryPoint[]);
     setSuggestions((suggestionsData || []) as Suggestion[]);
+    setSuggestionResponses((suggestionResponsesData || []) as SuggestionResponse[]);
 
     setSelectedChartPlayer((prev) => {
       if (prev) return prev;
@@ -672,6 +683,17 @@ export default function Page() {
     return slotsWithPlayers.find((slot) => slot.id === selectedPaymentSlotId) || null;
   }, [selectedPaymentSlotId, slotsWithPlayers]);
 
+  const responsesBySuggestionId = useMemo(() => {
+    const map = new Map<number, SuggestionResponse[]>();
+    for (const response of suggestionResponses) {
+      if (!map.has(response.suggestion_id)) {
+        map.set(response.suggestion_id, []);
+      }
+      map.get(response.suggestion_id)!.push(response);
+    }
+    return map;
+  }, [suggestionResponses]);
+
   const openSuggestions = useMemo(
     () => suggestions.filter((s) => s.status === 'open'),
     [suggestions]
@@ -841,6 +863,47 @@ export default function Page() {
     setNewSuggestionDate('');
     setNewSuggestionTime('');
     setNewSuggestionIsBooking(false);
+
+    await loadData();
+  }
+
+  async function joinSuggestion(suggestionId: number) {
+    const name = (joinSuggestionName[suggestionId] || '').trim();
+
+    if (!name) {
+      alert('Poné tu nombre para sumarte.');
+      return;
+    }
+
+    const { error } = await supabase.from('suggestion_responses').insert({
+      suggestion_id: suggestionId,
+      responder_name: name,
+    });
+
+    if (error) {
+      if (error.message.toLowerCase().includes('duplicate') || error.message.toLowerCase().includes('unique')) {
+        alert('Ese nombre ya se sumó a esta sugerencia.');
+      } else {
+        alert(`No se pudo sumar: ${error.message}`);
+      }
+      return;
+    }
+
+    setJoinSuggestionName((prev) => ({ ...prev, [suggestionId]: '' }));
+    await loadData();
+  }
+
+  async function leaveSuggestion(suggestionId: number, responderName: string) {
+    const { error } = await supabase
+      .from('suggestion_responses')
+      .delete()
+      .eq('suggestion_id', suggestionId)
+      .ilike('responder_name', responderName);
+
+    if (error) {
+      alert(`No se pudo salir: ${error.message}`);
+      return;
+    }
 
     await loadData();
   }
@@ -1814,12 +1877,7 @@ export default function Page() {
       )}
 
       {!loading && activeTab === 'sugerencias' && (
-        <div
-          style={{
-            display: 'grid',
-            gap: 16,
-          }}
-        >
+        <div style={{ display: 'grid', gap: 16 }}>
           <div
             style={{
               background: 'white',
@@ -1972,55 +2030,64 @@ export default function Page() {
             >
               <h2 style={{ marginTop: 0, color: '#991b1b' }}>Urgentes</h2>
 
-              {urgentSuggestions.map((s) => (
-                <div
-                  key={s.id}
-                  style={{
-                    border: '1px solid #fecaca',
-                    background: '#fef2f2',
-                    borderRadius: 14,
-                    padding: 14,
-                    marginBottom: 12,
-                  }}
-                >
-                  <div style={{ fontWeight: 800, color: '#991b1b' }}>🚨 Reemplazo necesario</div>
+              {urgentSuggestions.map((s) => {
+                const responses = responsesBySuggestionId.get(s.id) || [];
 
+                return (
                   <div
+                    key={s.id}
                     style={{
-                      fontWeight: 800,
-                      color: '#7f1d1d',
-                      marginTop: 6,
-                      marginBottom: 6,
-                      fontSize: 13,
-                      letterSpacing: 0.3,
+                      border: '1px solid #fecaca',
+                      background: '#fef2f2',
+                      borderRadius: 14,
+                      padding: 14,
+                      marginBottom: 12,
                     }}
                   >
-                    {getSuggestionTypeLabel(s.type)}
-                  </div>
+                    <div style={{ fontWeight: 800, color: '#991b1b' }}>🚨 Reemplazo necesario</div>
 
-                  <div style={{ marginTop: 8, color: '#111827' }}>{s.message}</div>
-                  <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
-                    {s.author_name} • {new Date(s.created_at).toLocaleString()}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                    <button
-                      onClick={() => copySuggestionMessage(s.message)}
+                    <div
                       style={{
-                        padding: '10px 12px',
-                        borderRadius: 10,
-                        border: '1px solid #d1d5db',
-                        background: 'white',
-                        cursor: 'pointer',
-                        fontWeight: 700,
+                        fontWeight: 800,
+                        color: '#7f1d1d',
+                        marginTop: 6,
+                        marginBottom: 6,
+                        fontSize: 13,
+                        letterSpacing: 0.3,
                       }}
                     >
-                      Copiar mensaje
-                    </button>
+                      {getSuggestionTypeLabel(s.type)}
+                    </div>
 
-                    {adminUnlocked && (
+                    <div style={{ marginTop: 8, color: '#111827' }}>{s.message}</div>
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+                      {s.author_name} • {new Date(s.created_at).toLocaleString()}
+                    </div>
+
+                    {responses.length > 0 && (
+                      <div style={{ marginTop: 10, fontSize: 13, color: '#374151' }}>
+                        <strong>Se sumaron:</strong> {responses.map((r) => r.responder_name).join(', ')}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                      <input
+                        type="text"
+                        value={joinSuggestionName[s.id] || ''}
+                        onChange={(e) =>
+                          setJoinSuggestionName((prev) => ({ ...prev, [s.id]: e.target.value }))
+                        }
+                        placeholder="Tu nombre"
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          border: '1px solid #d1d5db',
+                          minWidth: 160,
+                        }}
+                      />
+
                       <button
-                        onClick={() => closeSuggestion(s.id)}
+                        onClick={() => joinSuggestion(s.id)}
                         style={{
                           padding: '10px 12px',
                           borderRadius: 10,
@@ -2031,12 +2098,43 @@ export default function Page() {
                           fontWeight: 700,
                         }}
                       >
-                        Cerrar
+                        Me sumo
                       </button>
-                    )}
+
+                      <button
+                        onClick={() => copySuggestionMessage(s.message)}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          border: '1px solid #d1d5db',
+                          background: 'white',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Copiar mensaje
+                      </button>
+
+                      {adminUnlocked && (
+                        <button
+                          onClick={() => closeSuggestion(s.id)}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: 'none',
+                            background: '#111827',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                        >
+                          Cerrar
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -2057,6 +2155,7 @@ export default function Page() {
             {regularSuggestions.map((s) => {
               const isBooking = s.is_booking_request;
               const typeLabel = getSuggestionTypeLabel(s.type);
+              const responses = responsesBySuggestionId.get(s.id) || [];
 
               return (
                 <div
@@ -2107,7 +2206,59 @@ export default function Page() {
                     {s.author_name} • {new Date(s.created_at).toLocaleString()}
                   </div>
 
+                  {responses.length > 0 && (
+                    <div style={{ marginTop: 10, fontSize: 13, color: '#374151' }}>
+                      <strong>Se sumaron:</strong> {responses.map((r) => r.responder_name).join(', ')}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <input
+                      type="text"
+                      value={joinSuggestionName[s.id] || ''}
+                      onChange={(e) =>
+                        setJoinSuggestionName((prev) => ({ ...prev, [s.id]: e.target.value }))
+                      }
+                      placeholder="Tu nombre"
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: '1px solid #d1d5db',
+                        minWidth: 160,
+                      }}
+                    />
+
+                    <button
+                      onClick={() => joinSuggestion(s.id)}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: 'none',
+                        background: '#111827',
+                        color: 'white',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Me sumo
+                    </button>
+
+                    {!!(joinSuggestionName[s.id] || '').trim() && (
+                      <button
+                        onClick={() => leaveSuggestion(s.id, (joinSuggestionName[s.id] || '').trim())}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          border: '1px solid #d1d5db',
+                          background: 'white',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Salir
+                      </button>
+                    )}
+
                     <button
                       onClick={() => copySuggestionMessage(s.message)}
                       style={{
