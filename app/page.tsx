@@ -155,6 +155,16 @@ export default function Page() {
   const [showVersionBanner, setShowVersionBanner] = useState(false);
   const [dismissedVersion, setDismissedVersion] = useState('');
 
+  const [newSuggestionAuthor, setNewSuggestionAuthor] = useState('');
+  const [newSuggestionType, setNewSuggestionType] = useState<
+    'availability' | 'need_players' | 'replacement_needed'
+  >('availability');
+  const [newSuggestionMessage, setNewSuggestionMessage] = useState('');
+  const [newSuggestionDate, setNewSuggestionDate] = useState('');
+  const [newSuggestionTime, setNewSuggestionTime] = useState('');
+  const [newSuggestionIsBooking, setNewSuggestionIsBooking] = useState(false);
+  const [savingSuggestion, setSavingSuggestion] = useState(false);
+
   const canSeeAdmin = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
@@ -734,6 +744,8 @@ export default function Page() {
         suggested_time: slot.time,
         is_urgent: true,
         status: 'open',
+        is_booking_request: false,
+        booking_status: 'open',
       });
 
       if (suggestionError) {
@@ -771,6 +783,51 @@ export default function Page() {
     if (res.ok) setAdminUnlocked(true);
   }
 
+  async function createSuggestion() {
+    const author = newSuggestionAuthor.trim();
+    const message = newSuggestionMessage.trim();
+
+    if (!author) {
+      alert('Poné tu nombre.');
+      return;
+    }
+
+    if (!message) {
+      alert('Escribí una sugerencia.');
+      return;
+    }
+
+    setSavingSuggestion(true);
+
+    const { error } = await supabase.from('suggestions').insert({
+      author_name: author,
+      type: newSuggestionType,
+      message,
+      suggested_date: newSuggestionDate || null,
+      suggested_time: newSuggestionTime || null,
+      is_urgent: false,
+      status: 'open',
+      is_booking_request: newSuggestionIsBooking,
+      booking_status: 'open',
+    });
+
+    setSavingSuggestion(false);
+
+    if (error) {
+      alert(`No se pudo guardar la sugerencia: ${error.message}`);
+      return;
+    }
+
+    setNewSuggestionAuthor('');
+    setNewSuggestionType('availability');
+    setNewSuggestionMessage('');
+    setNewSuggestionDate('');
+    setNewSuggestionTime('');
+    setNewSuggestionIsBooking(false);
+
+    await loadData();
+  }
+
   async function closeSuggestion(suggestionId: number) {
     if (!adminUnlocked) {
       alert('Primero tenés que entrar como admin.');
@@ -784,6 +841,44 @@ export default function Page() {
 
     if (error) {
       alert(`No se pudo cerrar la sugerencia: ${error.message}`);
+      return;
+    }
+
+    await loadData();
+  }
+
+  async function markSuggestionNotAvailable(suggestionId: number) {
+    if (!adminUnlocked) {
+      alert('Primero tenés que entrar como admin.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('suggestions')
+      .update({ booking_status: 'not_available' })
+      .eq('id', suggestionId);
+
+    if (error) {
+      alert(`No se pudo actualizar la sugerencia: ${error.message}`);
+      return;
+    }
+
+    await loadData();
+  }
+
+  async function markSuggestionBooked(suggestionId: number) {
+    if (!adminUnlocked) {
+      alert('Primero tenés que entrar como admin.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('suggestions')
+      .update({ booking_status: 'booked' })
+      .eq('id', suggestionId);
+
+    if (error) {
+      alert(`No se pudo actualizar la sugerencia: ${error.message}`);
       return;
     }
 
@@ -1708,6 +1803,141 @@ export default function Page() {
             gap: 16,
           }}
         >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: 20,
+              padding: 20,
+              border: '1px solid #e5e7eb',
+            }}
+          >
+            <h2 style={{ marginTop: 0 }}>Nueva sugerencia</h2>
+
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>Nombre</div>
+                <input
+                  type="text"
+                  value={newSuggestionAuthor}
+                  onChange={(e) => setNewSuggestionAuthor(e.target.value)}
+                  placeholder="Tu nombre"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid #d1d5db',
+                  }}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>Tipo</div>
+                <select
+                  value={newSuggestionType}
+                  onChange={(e) =>
+                    setNewSuggestionType(
+                      e.target.value as 'availability' | 'need_players' | 'replacement_needed'
+                    )
+                  }
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid #d1d5db',
+                    background: 'white',
+                  }}
+                >
+                  <option value="availability">Quiero jugar</option>
+                  <option value="need_players">Busco jugadores</option>
+                  <option value="replacement_needed">Necesito reemplazo</option>
+                </select>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>Mensaje</div>
+                <textarea
+                  value={newSuggestionMessage}
+                  onChange={(e) => setNewSuggestionMessage(e.target.value)}
+                  placeholder='Ej: Fernando para jugar mañana después de 6pm, ¿están?'
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid #d1d5db',
+                    resize: 'vertical',
+                    fontFamily: 'Arial, sans-serif',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                    Fecha (opcional)
+                  </div>
+                  <input
+                    type="date"
+                    value={newSuggestionDate}
+                    onChange={(e) => setNewSuggestionDate(e.target.value)}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      border: '1px solid #d1d5db',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                    Hora (opcional)
+                  </div>
+                  <input
+                    type="time"
+                    value={newSuggestionTime}
+                    onChange={(e) => setNewSuggestionTime(e.target.value)}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      border: '1px solid #d1d5db',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 700 }}>
+                  <input
+                    type="checkbox"
+                    checked={newSuggestionIsBooking}
+                    onChange={(e) => setNewSuggestionIsBooking(e.target.checked)}
+                    style={{ marginRight: 8 }}
+                  />
+                  Confirmar sacar turno
+                </label>
+              </div>
+
+              <div>
+                <button
+                  onClick={createSuggestion}
+                  disabled={savingSuggestion}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: '#111827',
+                    color: 'white',
+                    cursor: savingSuggestion ? 'default' : 'pointer',
+                    fontWeight: 700,
+                    opacity: savingSuggestion ? 0.7 : 1,
+                  }}
+                >
+                  {savingSuggestion ? 'Guardando...' : 'Publicar sugerencia'}
+                </button>
+              </div>
+            </div>
+          </div>
+
           {urgentSuggestions.length > 0 && (
             <div
               style={{
@@ -1787,56 +2017,113 @@ export default function Page() {
               <div style={{ color: '#64748b' }}>No hay sugerencias abiertas todavía.</div>
             )}
 
-            {regularSuggestions.map((s) => (
-              <div
-                key={s.id}
-                style={{
-                  border: '1px solid #e5e7eb',
-                  background: '#f8fafc',
-                  borderRadius: 14,
-                  padding: 14,
-                  marginBottom: 12,
-                }}
-              >
-                <div style={{ fontWeight: 700, color: '#111827' }}>{s.message}</div>
-                <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
-                  {s.author_name} • {new Date(s.created_at).toLocaleString()}
-                </div>
+            {regularSuggestions.map((s) => {
+              const isBooking = s.is_booking_request;
 
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                  <button
-                    onClick={() => copySuggestionMessage(s.message)}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      border: '1px solid #d1d5db',
-                      background: 'white',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                    }}
-                  >
-                    Copiar mensaje
-                  </button>
+              return (
+                <div
+                  key={s.id}
+                  style={{
+                    border: isBooking ? '2px solid #c2410c' : '1px solid #e5e7eb',
+                    background: isBooking ? '#fff7ed' : '#f8fafc',
+                    borderRadius: 14,
+                    padding: 14,
+                    marginBottom: 12,
+                  }}
+                >
+                  {isBooking && (
+                    <div style={{ fontWeight: 800, color: '#9a3412', marginBottom: 6 }}>
+                      SACAR TURNO
+                    </div>
+                  )}
 
-                  {adminUnlocked && (
+                  {s.booking_status === 'not_available' && (
+                    <div style={{ fontWeight: 800, color: '#991b1b', marginBottom: 6 }}>
+                      ❌ NO DISPONIBLE
+                    </div>
+                  )}
+
+                  {s.booking_status === 'booked' && (
+                    <div style={{ fontWeight: 800, color: '#065f46', marginBottom: 6 }}>
+                      ✅ TURNO SACADO
+                    </div>
+                  )}
+
+                  <div style={{ fontWeight: isBooking ? 800 : 700, color: '#111827' }}>
+                    {s.message}
+                  </div>
+
+                  <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
+                    {s.author_name} • {new Date(s.created_at).toLocaleString()}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
                     <button
-                      onClick={() => closeSuggestion(s.id)}
+                      onClick={() => copySuggestionMessage(s.message)}
                       style={{
                         padding: '10px 12px',
                         borderRadius: 10,
-                        border: 'none',
-                        background: '#111827',
-                        color: 'white',
+                        border: '1px solid #d1d5db',
+                        background: 'white',
                         cursor: 'pointer',
                         fontWeight: 700,
                       }}
                     >
-                      Cerrar
+                      Copiar
                     </button>
-                  )}
+
+                    {adminUnlocked && isBooking && s.booking_status === 'open' && (
+                      <>
+                        <button
+                          onClick={() => markSuggestionNotAvailable(s.id)}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: '1px solid #d1d5db',
+                            background: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                        >
+                          No disponible
+                        </button>
+
+                        <button
+                          onClick={() => markSuggestionBooked(s.id)}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: 'none',
+                            background: '#111827',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                        >
+                          Turno sacado
+                        </button>
+                      </>
+                    )}
+
+                    {adminUnlocked && (
+                      <button
+                        onClick={() => closeSuggestion(s.id)}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          border: '1px solid #d1d5db',
+                          background: 'white',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Cerrar
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
