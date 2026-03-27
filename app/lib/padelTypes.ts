@@ -27,6 +27,13 @@ export type Suggestion = {
   booking_status: BookingStatus;
 };
 
+export type SuggestionResponse = {
+  id: number;
+  suggestion_id: number;
+  responder_name: string;
+  created_at: string;
+};
+
 export type NewSuggestionFormState = {
   authorName: string;
   type: SuggestionType;
