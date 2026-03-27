@@ -80,7 +80,12 @@ function formatPaymentDetail(player: SlotPlayerWithPaymentUI) {
     const payment = player.latestVerifiedPayment;
     if (!payment) return 'Pago verificado';
 
-    const method = payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle';
+    const method =
+      payment.payment_method === 'venmo'
+        ? 'Venmo'
+        : payment.payment_method === 'cash'
+          ? 'Cash'
+          : 'Zelle';
 
     if (player.paidByPlayerName && player.paidByPlayerName !== player.name) {
       return `Verificado via ${method} · pagó ${player.paidByPlayerName}`;
@@ -93,7 +98,12 @@ function formatPaymentDetail(player: SlotPlayerWithPaymentUI) {
     const payment = player.latestReportedPayment;
     if (!payment) return 'Pago reportado pendiente de validación';
 
-    const method = payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle';
+    const method =
+      payment.payment_method === 'venmo'
+        ? 'Venmo'
+        : payment.payment_method === 'cash'
+          ? 'Cash'
+          : 'Zelle';
 
     if (player.paidByPlayerName && player.paidByPlayerName !== player.name) {
       return `Reportado via ${method} · pagó ${player.paidByPlayerName}`;
@@ -159,6 +169,42 @@ const secondaryButtonStyle: React.CSSProperties = {
   fontSize: 14,
   minHeight: 44,
 };
+
+function normalizePaymentMethod(method: string) {
+  const value = method.trim().toLowerCase();
+  if (value === 'venmo' || value === 'zelle' || value === 'cash') return value;
+  return null;
+}
+
+async function handleDirectMarkPaid(
+  adminAction: (action: any) => Promise<{ ok: boolean; data: any }>,
+  loadData: () => Promise<void>,
+  slotId: number,
+  playerId: number
+) {
+  const methodInput = window.prompt('Método de pago: venmo, zelle o cash', 'venmo');
+  if (!methodInput) return;
+
+  const paymentMethod = normalizePaymentMethod(methodInput);
+  if (!paymentMethod) {
+    window.alert('Método inválido. Usá: venmo, zelle o cash.');
+    return;
+  }
+
+  const result = await adminAction({
+    action: 'markPaidDirect',
+    slotId,
+    playerId,
+    paymentMethod,
+  });
+
+  if (!result?.ok) {
+    window.alert('No se pudo marcar el pago.');
+    return;
+  }
+
+  await loadData();
+}
 
 export default function TurnosTab({
   groupedSlots,
@@ -530,12 +576,33 @@ export default function TurnosTab({
 
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                 {p.paymentVisualStatus === 'unpaid' && (
-                                  <button
-                                    onClick={() => openReportPaymentModal(slot.id, p.id)}
-                                    style={secondaryButtonStyle}
-                                  >
-                                    Report Payment
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => openReportPaymentModal(slot.id, p.id)}
+                                      style={secondaryButtonStyle}
+                                    >
+                                      Report Payment
+                                    </button>
+
+                                    {adminUnlocked && (
+                                      <button
+                                        onClick={() =>
+                                          handleDirectMarkPaid(
+                                            adminAction,
+                                            loadData,
+                                            slot.id,
+                                            p.id
+                                          )
+                                        }
+                                        style={{
+                                          ...primaryButtonStyle,
+                                          background: '#166534',
+                                        }}
+                                      >
+                                        Mark Paid
+                                      </button>
+                                    )}
+                                  </>
                                 )}
 
                                 <button
@@ -689,12 +756,33 @@ export default function TurnosTab({
 
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                 {p.paymentVisualStatus === 'unpaid' && (
-                                  <button
-                                    onClick={() => openReportPaymentModal(slot.id, p.id)}
-                                    style={secondaryButtonStyle}
-                                  >
-                                    Report Payment
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => openReportPaymentModal(slot.id, p.id)}
+                                      style={secondaryButtonStyle}
+                                    >
+                                      Report Payment
+                                    </button>
+
+                                    {adminUnlocked && (
+                                      <button
+                                        onClick={() =>
+                                          handleDirectMarkPaid(
+                                            adminAction,
+                                            loadData,
+                                            slot.id,
+                                            p.id
+                                          )
+                                        }
+                                        style={{
+                                          ...primaryButtonStyle,
+                                          background: '#166534',
+                                        }}
+                                      >
+                                        Mark Paid
+                                      </button>
+                                    )}
+                                  </>
                                 )}
 
                                 <button
@@ -760,7 +848,11 @@ export default function TurnosTab({
                                   }}
                                 >
                                   {payerName} reportó pago via{' '}
-                                  {payment.payment_method === 'venmo' ? 'Venmo' : 'Zelle'}
+                                  {payment.payment_method === 'venmo'
+                                    ? 'Venmo'
+                                    : payment.payment_method === 'cash'
+                                      ? 'Cash'
+                                      : 'Zelle'}
                                 </div>
 
                                 <div style={{ fontSize: 13, color: '#92400e', marginTop: 5 }}>
