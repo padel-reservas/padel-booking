@@ -822,11 +822,11 @@ export default function Page() {
   }
 
   async function createSuggestion() {
-    const author = newSuggestionAuthor.trim();
+    const author = myPlayerName.trim() || newSuggestionAuthor.trim();
     const rawMessage = newSuggestionMessage.trim();
 
     if (!author) {
-      alert('Poné tu nombre.');
+      alert('Elegí tu jugador en Ranking o escribí tu nombre.');
       return;
     }
 
@@ -1905,21 +1905,23 @@ export default function Page() {
             <h2 style={{ marginTop: 0 }}>Nueva sugerencia</h2>
 
             <div style={{ display: 'grid', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>Nombre</div>
-                <input
-                  type="text"
-                  value={newSuggestionAuthor}
-                  onChange={(e) => setNewSuggestionAuthor(e.target.value)}
-                  placeholder="Tu nombre"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: 12,
-                    border: '1px solid #d1d5db',
-                  }}
-                />
-              </div>
+              {!myPlayerName && (
+                <div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>Nombre</div>
+                  <input
+                    type="text"
+                    value={newSuggestionAuthor}
+                    onChange={(e) => setNewSuggestionAuthor(e.target.value)}
+                    placeholder="Tu nombre"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      border: '1px solid #d1d5db',
+                    }}
+                  />
+                </div>
+              )}
 
               <div>
                 <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>Tipo</div>
@@ -2110,21 +2112,6 @@ export default function Page() {
                         />
                       )}
 
-                      {myPlayerName && (
-                        <div
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 10,
-                            border: '1px solid #d1d5db',
-                            background: 'white',
-                            fontWeight: 700,
-                            color: '#374151',
-                          }}
-                        >
-                          Actuás como: {myPlayerName}
-                        </div>
-                      )}
-
                       <button
                         onClick={() => joinSuggestion(s.id)}
                         disabled={joinedByCurrentUser}
@@ -2290,21 +2277,6 @@ export default function Page() {
                           minWidth: 160,
                         }}
                       />
-                    )}
-
-                    {myPlayerName && (
-                      <div
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 10,
-                          border: '1px solid #d1d5db',
-                          background: 'white',
-                          fontWeight: 700,
-                          color: '#374151',
-                        }}
-                      >
-                        Actuás como: {myPlayerName}
-                      </div>
                     )}
 
                     <button
