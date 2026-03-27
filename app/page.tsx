@@ -58,6 +58,14 @@ type SlotWithPlayers = Slot & {
   match: Match | null;
 };
 
+function getSuggestionTypeLabel(
+  type: 'availability' | 'need_players' | 'replacement_needed'
+) {
+  if (type === 'availability') return 'QUIERO JUGAR';
+  if (type === 'need_players') return 'BUSCO JUGADORES';
+  return 'NECESITO REEMPLAZO';
+}
+
 function getLatestPaymentByStatus(
   player: SlotPlayer,
   status: 'reported' | 'verified'
@@ -1976,6 +1984,20 @@ export default function Page() {
                   }}
                 >
                   <div style={{ fontWeight: 800, color: '#991b1b' }}>🚨 Reemplazo necesario</div>
+
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      color: '#7f1d1d',
+                      marginTop: 6,
+                      marginBottom: 6,
+                      fontSize: 13,
+                      letterSpacing: 0.3,
+                    }}
+                  >
+                    {getSuggestionTypeLabel(s.type)}
+                  </div>
+
                   <div style={{ marginTop: 8, color: '#111827' }}>{s.message}</div>
                   <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
                     {s.author_name} • {new Date(s.created_at).toLocaleString()}
@@ -2034,6 +2056,7 @@ export default function Page() {
 
             {regularSuggestions.map((s) => {
               const isBooking = s.is_booking_request;
+              const typeLabel = getSuggestionTypeLabel(s.type);
 
               return (
                 <div
@@ -2051,6 +2074,18 @@ export default function Page() {
                       SACAR TURNO
                     </div>
                   )}
+
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      color: '#374151',
+                      marginBottom: 6,
+                      fontSize: 13,
+                      letterSpacing: 0.3,
+                    }}
+                  >
+                    {typeLabel}
+                  </div>
 
                   {s.booking_status === 'not_available' && (
                     <div style={{ fontWeight: 800, color: '#991b1b', marginBottom: 6 }}>
