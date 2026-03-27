@@ -1008,19 +1008,98 @@ export default function Page() {
     await loadData();
   }
 
-  async function markSuggestionBooked(suggestionId: number) {
+  async function markSuggestionBookedAndCreateSlot(suggestionId: number) {
     if (!adminUnlocked) {
       alert('Primero tenés que entrar como admin.');
       return;
     }
 
-    const { error } = await supabase
+    const suggestion = suggestions.find((s) => s.id === suggestionId);
+    if (!suggestion) {
+      alert('No se encontró la sugerencia.');
+      return;
+    }
+
+    if (!suggestion.is_booking_request) {
+      alert('Esta acción es solo para sugerencias de sacar turno.');
+      return;
+    }
+
+    if (!suggestion.suggested_date || !suggestion.suggested_time) {
+      alert('La sugerencia no tiene fecha u hora.');
+      return;
+    }
+
+    const { data: existingSlot, error: existingSlotError } = await supabase
+      .from('slots')
+      .select('id')
+      .eq('date', suggestion.suggested_date)
+      .eq('time', suggestion.suggested_time)
+      .maybeSingle();
+
+    if (existingSlotError) {
+      alert(`No se pudo validar si el turno ya existía: ${existingSlotError.message}`);
+      return;
+    }
+
+    if (existingSlot) {
+      alert('Ya existe un turno con esa fecha y hora en la app.');
+      return;
+    }
+
+    const { data: createdSlot, error: createSlotError } = await supabase
+      .from('slots')
+      .insert({
+        date: suggestion.suggested_date,
+        time: suggestion.suggested_time,
+      })
+      .select()
+      .single();
+
+    if (createSlotError || !createdSlot) {
+      alert(`No se pudo crear el turno: ${createSlotError?.message || 'error desconocido'}`);
+      return;
+    }
+
+    const responses = (responsesBySuggestionId.get(suggestionId) || []).slice(0, 4);
+
+    if (responses.length > 0) {
+      const uniqueNames: string[] = [];
+      for (const response of responses) {
+        const normalized = normalizeName(response.responder_name);
+        if (!uniqueNames.some((name) => normalizeName(name) === normalized)) {
+          uniqueNames.push(response.responder_name.trim());
+        }
+      }
+
+      if (uniqueNames.length > 0) {
+        const playersPayload = uniqueNames.map((name) => ({
+          slot_id: createdSlot.id,
+          name,
+          paid: false,
+        }));
+
+        const { error: insertPlayersError } = await supabase
+          .from('players')
+          .insert(playersPayload);
+
+        if (insertPlayersError) {
+          alert(`Se creó el turno, pero no se pudieron agregar los jugadores: ${insertPlayersError.message}`);
+          return;
+        }
+      }
+    }
+
+    const { error: updateSuggestionError } = await supabase
       .from('suggestions')
-      .update({ booking_status: 'booked' })
+      .update({
+        booking_status: 'booked',
+        status: 'resolved',
+      })
       .eq('id', suggestionId);
 
-    if (error) {
-      alert(`No se pudo actualizar la sugerencia: ${error.message}`);
+    if (updateSuggestionError) {
+      alert(`Se creó el turno, pero no se pudo actualizar la sugerencia: ${updateSuggestionError.message}`);
       return;
     }
 
@@ -2483,7 +2562,7 @@ export default function Page() {
                         </button>
 
                         <button
-                          onClick={() => markSuggestionBooked(s.id)}
+                          onClick={() => markSuggestionBookedAndCreateSlot(s.id)}
                           style={{
                             padding: '10px 12px',
                             borderRadius: 10,
