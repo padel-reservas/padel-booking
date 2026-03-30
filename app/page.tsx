@@ -803,6 +803,25 @@ export default function Page() {
     if (!player) return;
 
     const slot = slotsWithPlayers.find((s) => s.id === player.slot_id);
+    if (!slot) {
+      alert('No se encontró el turno del jugador.');
+      return;
+    }
+
+    if (!adminUnlocked) {
+      const currentName = (nameInput[slot.id] || '').trim().toLowerCase();
+      const playerName = player.name.trim().toLowerCase();
+
+      if (!currentName) {
+        alert('Para borrarte, escribí tu nombre en ese turno.');
+        return;
+      }
+
+      if (currentName !== playerName) {
+        alert('Solo podés borrarte a vos mismo.');
+        return;
+      }
+    }
 
     const shouldCreateUrgentSuggestion =
       !!slot && slot.activePlayers.length === 4 && slot.waitlistPlayers.length === 0;
