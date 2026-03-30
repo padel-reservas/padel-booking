@@ -130,6 +130,17 @@ function enrichPlayerPaymentUI(
   };
 }
 
+function normalizeName(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function normalizeTimeValue(value: string) {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{2}):(\d{2})/);
+  if (!match) return trimmed;
+  return `${match[1]}:${match[2]}`;
+}
+
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabKey>('turnos');
 
@@ -192,10 +203,6 @@ export default function Page() {
     const params = new URLSearchParams(window.location.search);
     return params.get('admin') === '1';
   }, []);
-
-  function normalizeName(value: string) {
-    return value.trim().toLowerCase();
-  }
 
   function getEffectiveResponderName(suggestionId: number) {
     return myPlayerName.trim() || (joinSuggestionName[suggestionId] || '').trim();
@@ -824,7 +831,7 @@ export default function Page() {
     }
 
     const shouldCreateUrgentSuggestion =
-      !!slot && slot.activePlayers.length === 4 && slot.waitlistPlayers.length === 0;
+      slot.activePlayers.length === 4 && slot.waitlistPlayers.length === 0;
 
     const removedPlayerName = player.name;
 
@@ -835,7 +842,7 @@ export default function Page() {
       return;
     }
 
-    if (shouldCreateUrgentSuggestion && slot) {
+    if (shouldCreateUrgentSuggestion) {
       const message = `${removedPlayerName} se bajó del turno del ${slot.date} a las ${slot.time}. Falta 1 jugador.`;
 
       const { error: suggestionError } = await supabase.from('suggestions').insert({
@@ -905,8 +912,11 @@ export default function Page() {
       return;
     }
 
+    const normalizedSuggestedDate = newSuggestionDate.trim();
+    const normalizedSuggestedTime = normalizeTimeValue(newSuggestionTime);
+
     const message = newSuggestionIsBooking
-      ? rawMessage || `Sacar turno ${newSuggestionDate} ${newSuggestionTime}`
+      ? rawMessage || `Sacar turno ${normalizedSuggestedDate} ${normalizedSuggestedTime}`
       : rawMessage;
 
     setSavingSuggestion(true);
@@ -915,8 +925,8 @@ export default function Page() {
       author_name: author,
       type: newSuggestionType,
       message,
-      suggested_date: newSuggestionDate || null,
-      suggested_time: newSuggestionTime || null,
+      suggested_date: normalizedSuggestedDate || null,
+      suggested_time: normalizedSuggestedTime || null,
       is_urgent: false,
       status: 'open',
       is_booking_request: newSuggestionIsBooking,
@@ -1033,27 +1043,35 @@ export default function Page() {
       return;
     }
 
-    const suggestion = suggestions.find((s) => s.id === suggestionId);
-    if (!suggestion) {
-      alert('No se encontró la sugerencia.');
+    const { data: freshSuggestion, error: freshSuggestionError } = await supabase
+      .from('suggestions')
+      .select('*')
+      .eq('id', suggestionId)
+      .single();
+
+    if (freshSuggestionError || !freshSuggestion) {
+      alert(`No se pudo leer la sugerencia: ${freshSuggestionError?.message || 'error desconocido'}`);
       return;
     }
 
-    if (!suggestion.is_booking_request) {
+    if (!freshSuggestion.is_booking_request) {
       alert('Esta acción es solo para sugerencias de sacar turno.');
       return;
     }
 
-    if (!suggestion.suggested_date || !suggestion.suggested_time) {
-      alert('La sugerencia no tiene fecha u hora.');
+    const slotDate = (freshSuggestion.suggested_date || '').trim();
+    const slotTime = normalizeTimeValue(freshSuggestion.suggested_time || '');
+
+    if (!slotDate || !slotTime) {
+      alert('La sugerencia no tiene fecha u hora válidas.');
       return;
     }
 
     const { data: existingSlot, error: existingSlotError } = await supabase
       .from('slots')
       .select('id')
-      .eq('date', suggestion.suggested_date)
-      .eq('time', suggestion.suggested_time)
+      .eq('date', slotDate)
+      .eq('time', slotTime)
       .maybeSingle();
 
     if (existingSlotError) {
@@ -1069,8 +1087,8 @@ export default function Page() {
     const { data: createdSlot, error: createSlotError } = await supabase
       .from('slots')
       .insert({
-        date: suggestion.suggested_date,
-        time: suggestion.suggested_time,
+        date: slotDate,
+        time: slotTime,
       })
       .select()
       .single();
