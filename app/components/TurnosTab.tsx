@@ -196,6 +196,21 @@ async function handleDirectMarkPaid(
   await loadData();
 }
 
+function canCurrentUserRemovePlayer(
+  slotId: number,
+  playerName: string,
+  nameInput: Record<number, string>,
+  adminUnlocked: boolean
+) {
+  if (adminUnlocked) return true;
+
+  const currentName = (nameInput[slotId] || '').trim().toLowerCase();
+  const targetName = playerName.trim().toLowerCase();
+
+  if (!currentName) return false;
+  return currentName === targetName;
+}
+
 export default function TurnosTab({
   groupedSlots,
   rankingPlayers,
@@ -488,6 +503,14 @@ export default function TurnosTab({
                         {slot.activePlayers.map((p, index) => {
                           const stats = rankingStats.get(p.name.trim().toLowerCase());
                           const paymentBadge = getPaymentBadge(p);
+                          const canRemove = canCurrentUserRemovePlayer(
+                            slot.id,
+                            p.name,
+                            nameInput,
+                            adminUnlocked
+                          );
+                          const currentName = (nameInput[slot.id] || '').trim().toLowerCase();
+                          const isMe = currentName !== '' && p.name.trim().toLowerCase() === currentName;
 
                           return (
                             <div
@@ -595,12 +618,14 @@ export default function TurnosTab({
                                   </>
                                 )}
 
-                                <button
-                                  onClick={() => removePlayer(p.id)}
-                                  style={secondaryButtonStyle}
-                                >
-                                  Borrarme
-                                </button>
+                                {canRemove && (
+                                  <button
+                                    onClick={() => removePlayer(p.id)}
+                                    style={secondaryButtonStyle}
+                                  >
+                                    {adminUnlocked && !isMe ? 'Eliminar jugador' : 'Borrarme'}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );
@@ -680,6 +705,14 @@ export default function TurnosTab({
                         {slot.waitlistPlayers.map((p, index) => {
                           const stats = rankingStats.get(p.name.trim().toLowerCase());
                           const paymentBadge = getPaymentBadge(p);
+                          const canRemove = canCurrentUserRemovePlayer(
+                            slot.id,
+                            p.name,
+                            nameInput,
+                            adminUnlocked
+                          );
+                          const currentName = (nameInput[slot.id] || '').trim().toLowerCase();
+                          const isMe = currentName !== '' && p.name.trim().toLowerCase() === currentName;
 
                           return (
                             <div
@@ -775,12 +808,14 @@ export default function TurnosTab({
                                   </>
                                 )}
 
-                                <button
-                                  onClick={() => removePlayer(p.id)}
-                                  style={secondaryButtonStyle}
-                                >
-                                  Borrarme
-                                </button>
+                                {canRemove && (
+                                  <button
+                                    onClick={() => removePlayer(p.id)}
+                                    style={secondaryButtonStyle}
+                                  >
+                                    {adminUnlocked && !isMe ? 'Eliminar jugador' : 'Borrarme'}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );
