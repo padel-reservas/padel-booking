@@ -1098,32 +1098,54 @@ export default function Page() {
       return;
     }
 
-    const responses = (responsesBySuggestionId.get(suggestionId) || []).slice(0, 4);
+    const { data: freshResponses, error: responsesError } = await supabase
+      .from('suggestion_responses')
+      .select('*')
+      .eq('suggestion_id', suggestionId)
+      .order('created_at', { ascending: true });
 
-    if (responses.length > 0) {
-      const uniqueNames: string[] = [];
-      for (const response of responses) {
-        const normalized = normalizeName(response.responder_name);
-        if (!uniqueNames.some((name) => normalizeName(name) === normalized)) {
-          uniqueNames.push(response.responder_name.trim());
-        }
+    if (responsesError) {
+      alert(`Se creó el turno, pero no se pudieron leer los jugadores sumados: ${responsesError.message}`);
+      return;
+    }
+
+    const candidateNames: string[] = [];
+
+    if (freshSuggestion.author_name?.trim()) {
+      candidateNames.push(freshSuggestion.author_name.trim());
+    }
+
+    for (const response of freshResponses || []) {
+      if (response.responder_name?.trim()) {
+        candidateNames.push(response.responder_name.trim());
       }
+    }
 
-      if (uniqueNames.length > 0) {
-        const playersPayload = uniqueNames.map((name) => ({
-          slot_id: createdSlot.id,
-          name,
-          paid: false,
-        }));
+    const uniqueNames: string[] = [];
+    for (const name of candidateNames) {
+      const normalized = normalizeName(name);
+      if (!normalized) continue;
+      if (!uniqueNames.some((existing) => normalizeName(existing) === normalized)) {
+        uniqueNames.push(name);
+      }
+    }
 
-        const { error: insertPlayersError } = await supabase
-          .from('players')
-          .insert(playersPayload);
+    const playersToInsert = uniqueNames.slice(0, MAX_PLAYERS);
 
-        if (insertPlayersError) {
-          alert(`Se creó el turno, pero no se pudieron agregar los jugadores: ${insertPlayersError.message}`);
-          return;
-        }
+    if (playersToInsert.length > 0) {
+      const playersPayload = playersToInsert.map((name) => ({
+        slot_id: createdSlot.id,
+        name,
+        paid: false,
+      }));
+
+      const { error: insertPlayersError } = await supabase
+        .from('players')
+        .insert(playersPayload);
+
+      if (insertPlayersError) {
+        alert(`Se creó el turno, pero no se pudieron agregar los jugadores: ${insertPlayersError.message}`);
+        return;
       }
     }
 
