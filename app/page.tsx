@@ -32,6 +32,8 @@ import type {
   ReportPaymentFormState,
   Suggestion,
   SuggestionResponse,
+  SuggestionAlternative,
+  SuggestionAlternativeJoiner,
 } from './lib/padelTypes';
 
 import {
@@ -66,6 +68,26 @@ type SuggestionFilter =
   | 'availability'
   | 'replacement_needed'
   | 'with_responses';
+
+type AlternativeDraftOption = {
+  date: string;
+  time: string;
+  label: string;
+};
+
+type AlternativeDraft = {
+  message: string;
+  options: AlternativeDraftOption[];
+};
+
+const EMPTY_ALTERNATIVE_DRAFT = (): AlternativeDraft => ({
+  message: '',
+  options: [
+    { date: '', time: '', label: '' },
+    { date: '', time: '', label: '' },
+    { date: '', time: '', label: '' },
+  ],
+});
 
 function getSuggestionTypeLabel(
   type: 'availability' | 'need_players' | 'replacement_needed'
@@ -141,6 +163,18 @@ function normalizeTimeValue(value: string) {
   return `${match[1]}:${match[2]}`;
 }
 
+function formatAlternativeLine(alt: SuggestionAlternative) {
+  const datePart = alt.alt_date || '';
+  const timePart = normalizeTimeValue(alt.alt_time || '');
+  const labelPart = (alt.alt_label || '').trim();
+
+  if (labelPart) {
+    return `${datePart} ${timePart} — ${labelPart}`.trim();
+  }
+
+  return `${datePart} ${timePart}`.trim();
+}
+
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabKey>('turnos');
 
@@ -151,6 +185,10 @@ export default function Page() {
   const [ratingHistory, setRatingHistory] = useState<PlayerRatingHistoryPoint[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [suggestionResponses, setSuggestionResponses] = useState<SuggestionResponse[]>([]);
+  const [suggestionAlternatives, setSuggestionAlternatives] = useState<SuggestionAlternative[]>([]);
+  const [suggestionAlternativeJoiners, setSuggestionAlternativeJoiners] = useState<
+    SuggestionAlternativeJoiner[]
+  >([]);
 
   const [selectedChartPlayer, setSelectedChartPlayer] = useState<string>('');
   const [selectedActivityPlayer, setSelectedActivityPlayer] = useState<string>('');
@@ -198,6 +236,15 @@ export default function Page() {
   const [activeSuggestionFilter, setActiveSuggestionFilter] =
     useState<SuggestionFilter>('all');
 
+  const [openAlternativeEditorFor, setOpenAlternativeEditorFor] = useState<number | null>(null);
+  const [alternativeDraftBySuggestion, setAlternativeDraftBySuggestion] = useState<
+    Record<number, AlternativeDraft>
+  >({});
+  const [savingAlternativeFor, setSavingAlternativeFor] = useState<number | null>(null);
+  const [creatingSlotFromAlternativeId, setCreatingSlotFromAlternativeId] = useState<number | null>(
+    null
+  );
+
   const canSeeAdmin = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
@@ -219,6 +266,8 @@ export default function Page() {
       { data: ratingHistoryData, error: ratingHistoryError },
       { data: suggestionsData, error: suggestionsError },
       { data: suggestionResponsesData, error: suggestionResponsesError },
+      { data: suggestionAlternativesData, error: suggestionAlternativesError },
+      { data: suggestionAlternativeJoinersData, error: suggestionAlternativeJoinersError },
     ] = await Promise.all([
       supabase.from('slots').select('*').order('date').order('time'),
       supabase
@@ -273,6 +322,14 @@ export default function Page() {
         .from('suggestion_responses')
         .select('*')
         .order('created_at', { ascending: true }),
+      supabase
+        .from('suggestion_alternatives')
+        .select('*')
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('suggestion_alternative_joiners')
+        .select('*')
+        .order('created_at', { ascending: true }),
     ]);
 
     const firstError =
@@ -282,7 +339,9 @@ export default function Page() {
       matchesError ||
       ratingHistoryError ||
       suggestionsError ||
-      suggestionResponsesError;
+      suggestionResponsesError ||
+      suggestionAlternativesError ||
+      suggestionAlternativeJoinersError;
 
     if (firstError) {
       alert(`Error cargando datos: ${firstError.message}`);
@@ -304,6 +363,10 @@ export default function Page() {
     setRatingHistory((ratingHistoryData || []) as PlayerRatingHistoryPoint[]);
     setSuggestions((suggestionsData || []) as Suggestion[]);
     setSuggestionResponses((suggestionResponsesData || []) as SuggestionResponse[]);
+    setSuggestionAlternatives((suggestionAlternativesData || []) as SuggestionAlternative[]);
+    setSuggestionAlternativeJoiners(
+      (suggestionAlternativeJoinersData || []) as SuggestionAlternativeJoiner[]
+    );
 
     setSelectedChartPlayer((prev) => {
       if (prev) return prev;
@@ -719,6 +782,28 @@ export default function Page() {
     return map;
   }, [suggestionResponses]);
 
+  const alternativesBySuggestionId = useMemo(() => {
+    const map = new Map<number, SuggestionAlternative[]>();
+    for (const alternative of suggestionAlternatives) {
+      if (!map.has(alternative.suggestion_id)) {
+        map.set(alternative.suggestion_id, []);
+      }
+      map.get(alternative.suggestion_id)!.push(alternative);
+    }
+    return map;
+  }, [suggestionAlternatives]);
+
+  const alternativeJoinersByAlternativeId = useMemo(() => {
+    const map = new Map<number, SuggestionAlternativeJoiner[]>();
+    for (const joiner of suggestionAlternativeJoiners) {
+      if (!map.has(joiner.alternative_id)) {
+        map.set(joiner.alternative_id, []);
+      }
+      map.get(joiner.alternative_id)!.push(joiner);
+    }
+    return map;
+  }, [suggestionAlternativeJoiners]);
+
   const getSuggestionResponseCount = (suggestionId: number) =>
     (responsesBySuggestionId.get(suggestionId) || []).length;
 
@@ -769,6 +854,71 @@ export default function Page() {
     () => regularSuggestions.filter(matchesSuggestionFilter),
     [regularSuggestions, activeSuggestionFilter, suggestionResponses]
   );
+
+  function openAlternativeEditor(suggestion: Suggestion) {
+    const existingAlternatives = alternativesBySuggestionId.get(suggestion.id) || [];
+    const paddedOptions: AlternativeDraftOption[] = [0, 1, 2].map((index) => {
+      const existing = existingAlternatives[index];
+      return {
+        date: existing?.alt_date || '',
+        time: existing ? normalizeTimeValue(existing.alt_time || '') : '',
+        label: existing?.alt_label || '',
+      };
+    });
+
+    setAlternativeDraftBySuggestion((prev) => ({
+      ...prev,
+      [suggestion.id]: {
+        message: suggestion.admin_response_message || '',
+        options: paddedOptions,
+      },
+    }));
+
+    setOpenAlternativeEditorFor(suggestion.id);
+  }
+
+  function closeAlternativeEditor() {
+    setOpenAlternativeEditorFor(null);
+  }
+
+  function updateAlternativeDraftField(
+    suggestionId: number,
+    field: 'message',
+    value: string
+  ) {
+    setAlternativeDraftBySuggestion((prev) => {
+      const current = prev[suggestionId] || EMPTY_ALTERNATIVE_DRAFT();
+      return {
+        ...prev,
+        [suggestionId]: {
+          ...current,
+          [field]: value,
+        },
+      };
+    });
+  }
+
+  function updateAlternativeDraftOption(
+    suggestionId: number,
+    optionIndex: number,
+    field: 'date' | 'time' | 'label',
+    value: string
+  ) {
+    setAlternativeDraftBySuggestion((prev) => {
+      const current = prev[suggestionId] || EMPTY_ALTERNATIVE_DRAFT();
+      const nextOptions = current.options.map((option, idx) =>
+        idx === optionIndex ? { ...option, [field]: value } : option
+      );
+
+      return {
+        ...prev,
+        [suggestionId]: {
+          ...current,
+          options: nextOptions,
+        },
+      };
+    });
+  }
 
   async function addPlayer(slotId: number) {
     const rawName = (nameInput[slotId] || '').trim();
@@ -1002,6 +1152,172 @@ export default function Page() {
     await loadData();
   }
 
+  async function joinSuggestionAlternative(suggestionId: number, alternativeId: number) {
+    const responderName = getEffectiveResponderName(suggestionId);
+
+    if (!responderName) {
+      alert('Elegí tu jugador en Ranking o escribí tu nombre para sumarte.');
+      return;
+    }
+
+    const { error } = await supabase.from('suggestion_alternative_joiners').insert({
+      alternative_id: alternativeId,
+      responder_name: responderName,
+    });
+
+    if (error) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('duplicate') || msg.includes('unique')) {
+        alert('Ese nombre ya se sumó a esta opción.');
+      } else {
+        alert(`No se pudo sumar a la opción: ${error.message}`);
+      }
+      return;
+    }
+
+    setJoinSuggestionName((prev) => ({ ...prev, [suggestionId]: '' }));
+    await loadData();
+  }
+
+  async function leaveSuggestionAlternative(suggestionId: number, alternativeId: number) {
+    const responderName = getEffectiveResponderName(suggestionId);
+
+    if (!responderName) {
+      alert('No se encontró el nombre para salir de la opción.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('suggestion_alternative_joiners')
+      .delete()
+      .eq('alternative_id', alternativeId)
+      .ilike('responder_name', responderName);
+
+    if (error) {
+      alert(`No se pudo salir de la opción: ${error.message}`);
+      return;
+    }
+
+    await loadData();
+  }
+
+  async function saveSuggestionAlternatives(suggestionId: number) {
+    if (!adminUnlocked) {
+      alert('Primero tenés que entrar como admin.');
+      return;
+    }
+
+    const draft = alternativeDraftBySuggestion[suggestionId] || EMPTY_ALTERNATIVE_DRAFT();
+
+    const cleanedOptions = draft.options
+      .map((option) => ({
+        date: option.date.trim(),
+        time: normalizeTimeValue(option.time),
+        label: option.label.trim(),
+      }))
+      .filter((option) => option.date && option.time);
+
+    if (cleanedOptions.length === 0) {
+      alert('Cargá al menos una alternativa con fecha y hora.');
+      return;
+    }
+
+    setSavingAlternativeFor(suggestionId);
+
+    const { error: updateSuggestionError } = await supabase
+      .from('suggestions')
+      .update({
+        admin_response_type: 'alternative_offered',
+        admin_response_message: draft.message.trim() || null,
+        admin_responded_at: new Date().toISOString(),
+        booking_status: 'open',
+      })
+      .eq('id', suggestionId);
+
+    if (updateSuggestionError) {
+      setSavingAlternativeFor(null);
+      alert(`No se pudo guardar la respuesta admin: ${updateSuggestionError.message}`);
+      return;
+    }
+
+    const existingAlternatives = alternativesBySuggestionId.get(suggestionId) || [];
+    const existingAlternativeIds = existingAlternatives.map((alt) => alt.id);
+
+    if (existingAlternativeIds.length > 0) {
+      const { error: deleteOldAlternativesError } = await supabase
+        .from('suggestion_alternatives')
+        .delete()
+        .eq('suggestion_id', suggestionId);
+
+      if (deleteOldAlternativesError) {
+        setSavingAlternativeFor(null);
+        alert(`No se pudieron actualizar las alternativas: ${deleteOldAlternativesError.message}`);
+        return;
+      }
+    }
+
+    const payload = cleanedOptions.map((option) => ({
+      suggestion_id: suggestionId,
+      alt_date: option.date,
+      alt_time: option.time,
+      alt_label: option.label || null,
+    }));
+
+    const { error: insertAlternativesError } = await supabase
+      .from('suggestion_alternatives')
+      .insert(payload);
+
+    setSavingAlternativeFor(null);
+
+    if (insertAlternativesError) {
+      alert(`No se pudieron guardar las alternativas: ${insertAlternativesError.message}`);
+      return;
+    }
+
+    setOpenAlternativeEditorFor(null);
+    await loadData();
+  }
+
+  async function clearSuggestionAlternatives(suggestionId: number) {
+    if (!adminUnlocked) {
+      alert('Primero tenés que entrar como admin.');
+      return;
+    }
+
+    const ok = window.confirm('¿Seguro que querés borrar las alternativas propuestas?');
+    if (!ok) return;
+
+    const { error: deleteAlternativesError } = await supabase
+      .from('suggestion_alternatives')
+      .delete()
+      .eq('suggestion_id', suggestionId);
+
+    if (deleteAlternativesError) {
+      alert(`No se pudieron borrar las alternativas: ${deleteAlternativesError.message}`);
+      return;
+    }
+
+    const { error: updateSuggestionError } = await supabase
+      .from('suggestions')
+      .update({
+        admin_response_type: null,
+        admin_response_message: null,
+        admin_responded_at: null,
+      })
+      .eq('id', suggestionId);
+
+    if (updateSuggestionError) {
+      alert(`No se pudo limpiar la respuesta admin: ${updateSuggestionError.message}`);
+      return;
+    }
+
+    if (openAlternativeEditorFor === suggestionId) {
+      setOpenAlternativeEditorFor(null);
+    }
+
+    await loadData();
+  }
+
   async function closeSuggestion(suggestionId: number) {
     if (!adminUnlocked) {
       alert('Primero tenés que entrar como admin.');
@@ -1029,7 +1345,12 @@ export default function Page() {
 
     const { error } = await supabase
       .from('suggestions')
-      .update({ booking_status: 'not_available' })
+      .update({
+        booking_status: 'not_available',
+        admin_response_type: 'not_available',
+        admin_response_message: null,
+        admin_responded_at: new Date().toISOString(),
+      })
       .eq('id', suggestionId);
 
     if (error) {
@@ -1157,12 +1478,145 @@ export default function Page() {
       .update({
         booking_status: 'booked',
         status: 'resolved',
+        admin_response_type: 'accepted',
+        admin_responded_at: new Date().toISOString(),
       })
       .eq('id', suggestionId);
 
     if (updateSuggestionError) {
       alert(`Se creó el turno, pero no se pudo actualizar la sugerencia: ${updateSuggestionError.message}`);
       return;
+    }
+
+    await loadData();
+  }
+
+  async function createSlotFromAlternative(suggestionId: number, alternativeId: number) {
+    if (!adminUnlocked) {
+      alert('Primero tenés que entrar como admin.');
+      return;
+    }
+
+    setCreatingSlotFromAlternativeId(alternativeId);
+
+    const suggestion = suggestions.find((s) => s.id === suggestionId);
+    const alternative = suggestionAlternatives.find((alt) => alt.id === alternativeId);
+
+    if (!suggestion || !alternative) {
+      setCreatingSlotFromAlternativeId(null);
+      alert('No se encontró la sugerencia o la alternativa.');
+      return;
+    }
+
+    const slotDate = (alternative.alt_date || '').trim();
+    const slotTime = normalizeTimeValue(alternative.alt_time || '');
+
+    if (!slotDate || !slotTime) {
+      setCreatingSlotFromAlternativeId(null);
+      alert('La alternativa no tiene fecha u hora válidas.');
+      return;
+    }
+
+    const { data: existingSlot, error: existingSlotError } = await supabase
+      .from('slots')
+      .select('id')
+      .eq('date', slotDate)
+      .eq('time', slotTime)
+      .maybeSingle();
+
+    if (existingSlotError) {
+      setCreatingSlotFromAlternativeId(null);
+      alert(`No se pudo validar si el turno ya existía: ${existingSlotError.message}`);
+      return;
+    }
+
+    if (existingSlot) {
+      setCreatingSlotFromAlternativeId(null);
+      alert('Ya existe un turno con esa fecha y hora en la app.');
+      return;
+    }
+
+    const { data: createdSlot, error: createSlotError } = await supabase
+      .from('slots')
+      .insert({
+        date: slotDate,
+        time: slotTime,
+      })
+      .select()
+      .single();
+
+    if (createSlotError || !createdSlot) {
+      setCreatingSlotFromAlternativeId(null);
+      alert(`No se pudo crear el turno: ${createSlotError?.message || 'error desconocido'}`);
+      return;
+    }
+
+    const joiners = alternativeJoinersByAlternativeId.get(alternativeId) || [];
+    const candidateNames: string[] = [];
+
+    if (suggestion.author_name?.trim()) {
+      candidateNames.push(suggestion.author_name.trim());
+    }
+
+    for (const joiner of joiners) {
+      if (joiner.responder_name?.trim()) {
+        candidateNames.push(joiner.responder_name.trim());
+      }
+    }
+
+    const uniqueNames: string[] = [];
+    for (const name of candidateNames) {
+      const normalized = normalizeName(name);
+      if (!normalized) continue;
+      if (!uniqueNames.some((existing) => normalizeName(existing) === normalized)) {
+        uniqueNames.push(name);
+      }
+    }
+
+    const playersToInsert = uniqueNames.slice(0, MAX_PLAYERS);
+
+    if (playersToInsert.length > 0) {
+      const payload = playersToInsert.map((name) => ({
+        slot_id: createdSlot.id,
+        name,
+        paid: false,
+      }));
+
+      const { error: insertPlayersError } = await supabase.from('players').insert(payload);
+
+      if (insertPlayersError) {
+        setCreatingSlotFromAlternativeId(null);
+        alert(`Se creó el turno, pero no se pudieron agregar los jugadores: ${insertPlayersError.message}`);
+        return;
+      }
+    }
+
+    const responseMessageBase = suggestion.admin_response_message?.trim() || '';
+    const alternativeText = formatAlternativeLine(alternative);
+    const nextResponseMessage = responseMessageBase
+      ? `${responseMessageBase}\n\n✅ Se creó turno desde alternativa: ${alternativeText}`
+      : `✅ Se creó turno desde alternativa: ${alternativeText}`;
+
+    const { error: updateSuggestionError } = await supabase
+      .from('suggestions')
+      .update({
+        booking_status: 'booked',
+        status: 'resolved',
+        admin_response_type: 'accepted',
+        admin_response_message: nextResponseMessage,
+        admin_responded_at: new Date().toISOString(),
+      })
+      .eq('id', suggestionId);
+
+    setCreatingSlotFromAlternativeId(null);
+
+    if (updateSuggestionError) {
+      alert(`Se creó el turno, pero no se pudo actualizar la sugerencia: ${updateSuggestionError.message}`);
+      return;
+    }
+
+    if (openAlternativeEditorFor === suggestionId) {
+      setOpenAlternativeEditorFor(null);
     }
 
     await loadData();
@@ -2462,6 +2916,10 @@ export default function Page() {
                   (r) => normalizeName(r.responder_name) === normalizeName(effectiveResponderName)
                 );
 
+              const alternatives = alternativesBySuggestionId.get(s.id) || [];
+              const isAlternativeEditorOpen = openAlternativeEditorFor === s.id;
+              const alternativeDraft = alternativeDraftBySuggestion[s.id] || EMPTY_ALTERNATIVE_DRAFT();
+
               return (
                 <div
                   key={s.id}
@@ -2529,6 +2987,12 @@ export default function Page() {
                     </div>
                   )}
 
+                  {s.admin_response_type === 'alternative_offered' && alternatives.length > 0 && (
+                    <div style={{ fontWeight: 800, color: '#9a3412', marginBottom: 6 }}>
+                      🔁 ALTERNATIVAS PROPUESTAS
+                    </div>
+                  )}
+
                   <div style={{ fontWeight: isBooking ? 800 : 700, color: '#111827' }}>
                     {s.message}
                   </div>
@@ -2536,6 +3000,131 @@ export default function Page() {
                   <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
                     {s.author_name} • {new Date(s.created_at).toLocaleString()}
                   </div>
+
+                  {s.admin_response_message && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: '10px 12px',
+                        borderRadius: 12,
+                        background: '#fff',
+                        border: '1px solid #fed7aa',
+                        color: '#7c2d12',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      <strong>Respuesta admin:</strong>
+                      <div style={{ marginTop: 6 }}>{s.admin_response_message}</div>
+                    </div>
+                  )}
+
+                  {alternatives.length > 0 && (
+                    <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+                      {alternatives.map((alternative) => {
+                        const alternativeJoiners =
+                          alternativeJoinersByAlternativeId.get(alternative.id) || [];
+                        const joinedThisAlternative =
+                          !!effectiveResponderName &&
+                          alternativeJoiners.some(
+                            (joiner) =>
+                              normalizeName(joiner.responder_name) ===
+                              normalizeName(effectiveResponderName)
+                          );
+
+                        return (
+                          <div
+                            key={alternative.id}
+                            style={{
+                              border: '1px solid #fdba74',
+                              background: '#ffffff',
+                              borderRadius: 12,
+                              padding: 12,
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontWeight: 800,
+                                color: '#9a3412',
+                                marginBottom: 6,
+                              }}
+                            >
+                              {formatAlternativeLine(alternative)}
+                            </div>
+
+                            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+                              {alternativeJoiners.length} sumados
+                            </div>
+
+                            {alternativeJoiners.length > 0 && (
+                              <div style={{ marginBottom: 10, fontSize: 13, color: '#374151' }}>
+                                <strong>Se sumaron a esta opción:</strong>{' '}
+                                {alternativeJoiners.map((joiner) => joiner.responder_name).join(', ')}
+                              </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <button
+                                onClick={() => joinSuggestionAlternative(s.id, alternative.id)}
+                                disabled={joinedThisAlternative}
+                                style={{
+                                  padding: '10px 12px',
+                                  borderRadius: 10,
+                                  border: 'none',
+                                  background: joinedThisAlternative ? '#9ca3af' : '#111827',
+                                  color: 'white',
+                                  cursor: joinedThisAlternative ? 'default' : 'pointer',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {joinedThisAlternative ? 'Ya me sumé a esta opción' : 'Me sumo a esta opción'}
+                              </button>
+
+                              {joinedThisAlternative && (
+                                <button
+                                  onClick={() => leaveSuggestionAlternative(s.id, alternative.id)}
+                                  style={{
+                                    padding: '10px 12px',
+                                    borderRadius: 10,
+                                    border: '1px solid #d1d5db',
+                                    background: 'white',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Salir de esta opción
+                                </button>
+                              )}
+
+                              {adminUnlocked && s.booking_status === 'open' && (
+                                <button
+                                  onClick={() => createSlotFromAlternative(s.id, alternative.id)}
+                                  disabled={creatingSlotFromAlternativeId === alternative.id}
+                                  style={{
+                                    padding: '10px 12px',
+                                    borderRadius: 10,
+                                    border: 'none',
+                                    background: '#111827',
+                                    color: 'white',
+                                    cursor:
+                                      creatingSlotFromAlternativeId === alternative.id
+                                        ? 'default'
+                                        : 'pointer',
+                                    fontWeight: 700,
+                                    opacity:
+                                      creatingSlotFromAlternativeId === alternative.id ? 0.7 : 1,
+                                  }}
+                                >
+                                  {creatingSlotFromAlternativeId === alternative.id
+                                    ? 'Creando...'
+                                    : 'Sacar turno desde esta opción'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {responses.length > 0 && (
                     <div style={{ marginTop: 10, fontSize: 13, color: '#374151' }}>
@@ -2624,6 +3213,30 @@ export default function Page() {
                         </button>
 
                         <button
+                          onClick={() =>
+                            isAlternativeEditorOpen
+                              ? closeAlternativeEditor()
+                              : openAlternativeEditor(s)
+                          }
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: '1px solid #d1d5db',
+                            background: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {alternatives.length > 0
+                            ? isAlternativeEditorOpen
+                              ? 'Cancelar edición'
+                              : 'Editar alternativas'
+                            : isAlternativeEditorOpen
+                              ? 'Cancelar'
+                              : 'Proponer alternativa'}
+                        </button>
+
+                        <button
                           onClick={() => markSuggestionBookedAndCreateSlot(s.id)}
                           style={{
                             padding: '10px 12px',
@@ -2656,6 +3269,192 @@ export default function Page() {
                       </button>
                     )}
                   </div>
+
+                  {adminUnlocked && isBooking && isAlternativeEditorOpen && s.booking_status === 'open' && (
+                    <div
+                      style={{
+                        marginTop: 14,
+                        borderTop: '1px solid #fdba74',
+                        paddingTop: 14,
+                        display: 'grid',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, color: '#9a3412' }}>
+                        Responder con alternativas
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                          Mensaje admin (opcional)
+                        </div>
+                        <textarea
+                          value={alternativeDraft.message}
+                          onChange={(e) =>
+                            updateAlternativeDraftField(s.id, 'message', e.target.value)
+                          }
+                          placeholder="Ej: Ese horario no está, pero sí estas opciones."
+                          rows={3}
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            borderRadius: 12,
+                            border: '1px solid #d1d5db',
+                            resize: 'vertical',
+                            fontFamily: 'Arial, sans-serif',
+                          }}
+                        />
+                      </div>
+
+                      {alternativeDraft.options.map((option, index) => (
+                        <div
+                          key={index}
+                          style={{
+                            border: '1px solid #fed7aa',
+                            borderRadius: 12,
+                            padding: 12,
+                            background: '#fff',
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontWeight: 700,
+                              marginBottom: 10,
+                              color: '#9a3412',
+                            }}
+                          >
+                            Opción {index + 1}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <div>
+                              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                                Fecha
+                              </div>
+                              <input
+                                type="date"
+                                value={option.date}
+                                onChange={(e) =>
+                                  updateAlternativeDraftOption(
+                                    s.id,
+                                    index,
+                                    'date',
+                                    e.target.value
+                                  )
+                                }
+                                style={{
+                                  padding: '10px 12px',
+                                  borderRadius: 12,
+                                  border: '1px solid #d1d5db',
+                                }}
+                              />
+                            </div>
+
+                            <div>
+                              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                                Hora
+                              </div>
+                              <input
+                                type="time"
+                                value={option.time}
+                                onChange={(e) =>
+                                  updateAlternativeDraftOption(
+                                    s.id,
+                                    index,
+                                    'time',
+                                    e.target.value
+                                  )
+                                }
+                                style={{
+                                  padding: '10px 12px',
+                                  borderRadius: 12,
+                                  border: '1px solid #d1d5db',
+                                }}
+                              />
+                            </div>
+
+                            <div style={{ minWidth: 220, flex: 1 }}>
+                              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                                Texto opcional
+                              </div>
+                              <input
+                                type="text"
+                                value={option.label}
+                                onChange={(e) =>
+                                  updateAlternativeDraftOption(
+                                    s.id,
+                                    index,
+                                    'label',
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="Ej: indoor / mejor franja / confirmado"
+                                style={{
+                                  width: '100%',
+                                  padding: '10px 12px',
+                                  borderRadius: 12,
+                                  border: '1px solid #d1d5db',
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => saveSuggestionAlternatives(s.id)}
+                          disabled={savingAlternativeFor === s.id}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: 'none',
+                            background: '#111827',
+                            color: 'white',
+                            cursor: savingAlternativeFor === s.id ? 'default' : 'pointer',
+                            fontWeight: 700,
+                            opacity: savingAlternativeFor === s.id ? 0.7 : 1,
+                          }}
+                        >
+                          {savingAlternativeFor === s.id
+                            ? 'Guardando...'
+                            : alternatives.length > 0
+                              ? 'Guardar cambios'
+                              : 'Publicar alternativas'}
+                        </button>
+
+                        {alternatives.length > 0 && (
+                          <button
+                            onClick={() => clearSuggestionAlternatives(s.id)}
+                            style={{
+                              padding: '10px 12px',
+                              borderRadius: 10,
+                              border: '1px solid #d1d5db',
+                              background: 'white',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                            }}
+                          >
+                            Borrar alternativas
+                          </button>
+                        )}
+
+                        <button
+                          onClick={closeAlternativeEditor}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: '1px solid #d1d5db',
+                            background: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
