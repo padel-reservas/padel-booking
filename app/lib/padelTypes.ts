@@ -180,7 +180,8 @@ export type TabKey =
   | 'ranking'
   | 'duelo'
   | 'historial'
-  | 'actividad';
+  | 'actividad'
+  | 'torneo';
 
 export type ResultFormMode = 'slot' | 'manual';
 
@@ -226,4 +227,11 @@ export type ActivityMatch = Match & {
   partnerName: string;
   opponent1Name: string;
   opponent2Name: string;
+};
+export type TournamentPlayer = {
+  id: number;
+  player_name: string;
+  status: 'confirmed' | 'withdrawn';
+  created_at: string;
+  updated_at: string;
 };
