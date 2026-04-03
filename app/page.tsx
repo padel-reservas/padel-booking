@@ -14,6 +14,7 @@ import WhatsAppReminderModal from './components/WhatsAppReminderModal';
 import Image from 'next/image';
 import logoDisplay from './logo-display.png';
 import { APP_VERSION } from './lib/appVersion';
+import TorneoTab from './components/TorneoTab';
 
 import type {
   ActivityMatch,
@@ -2339,7 +2340,7 @@ export default function Page() {
           {tabButton('Duelo', 'duelo')}
           {tabButton('Historial', 'historial')}
           {tabButton('Actividad', 'actividad')}
-
+          {tabButton('Torneo', 'torneo')}
           {canSeeAdmin && activeTab === 'turnos' && (
             <button
               onClick={() => setShowAdmin(!showAdmin)}
@@ -3506,7 +3507,14 @@ export default function Page() {
           activityData={activityData}
         />
       )}
-
+{!loading && activeTab === 'torneo' && (
+  <TorneoTab
+    rankingPlayers={rankingPlayers}
+    slots={slots}
+    slotPlayers={slotPlayers}
+    myPlayerName={myPlayerName}
+  />
+)}
       <ResultModal
         resultModalOpen={resultModalOpen}
         resultForm={resultForm}
