@@ -816,16 +816,19 @@ export default function Page() {
     }
 
     if (!adminUnlocked) {
-      const currentName = (nameInput[slot.id] || '').trim().toLowerCase();
-      const playerName = player.name.trim().toLowerCase();
+      const typedName = normalizeName(nameInput[slot.id] || '');
+      const selectedName = normalizeName(myPlayerName || '');
+      const playerName = normalizeName(player.name);
 
-      if (!currentName) {
-        alert('Para borrarte, escribí tu nombre en ese turno.');
-        return;
-      }
+      const identityCandidates = [selectedName, typedName].filter(Boolean);
+      const isAllowed = identityCandidates.some((candidate) => candidate === playerName);
 
-      if (currentName !== playerName) {
-        alert('Solo podés borrarte a vos mismo.');
+      if (!isAllowed) {
+        if (identityCandidates.length === 0) {
+          alert('Para borrarte, elegí tu jugador en Ranking o escribí tu nombre en ese turno.');
+        } else {
+          alert('Solo podés borrarte a vos mismo.');
+        }
         return;
       }
     }
