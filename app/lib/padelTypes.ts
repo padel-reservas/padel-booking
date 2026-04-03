@@ -11,6 +11,11 @@ export type PaymentVisualStatus = 'paid' | 'reported' | 'unpaid';
 export type SuggestionType = 'availability' | 'need_players' | 'replacement_needed';
 export type SuggestionStatus = 'open' | 'resolved' | 'cancelled';
 export type BookingStatus = 'open' | 'not_available' | 'booked';
+export type SuggestionAdminResponseType =
+  | 'accepted'
+  | 'not_available'
+  | 'alternative_offered'
+  | null;
 
 export type Suggestion = {
   id: number;
@@ -25,11 +30,31 @@ export type Suggestion = {
   created_at: string;
   is_booking_request: boolean;
   booking_status: BookingStatus;
+
+  admin_response_type: SuggestionAdminResponseType;
+  admin_response_message: string | null;
+  admin_responded_at: string | null;
 };
 
 export type SuggestionResponse = {
   id: number;
   suggestion_id: number;
+  responder_name: string;
+  created_at: string;
+};
+
+export type SuggestionAlternative = {
+  id: number;
+  suggestion_id: number;
+  alt_date: string;
+  alt_time: string;
+  alt_label: string | null;
+  created_at: string;
+};
+
+export type SuggestionAlternativeJoiner = {
+  id: number;
+  alternative_id: number;
   responder_name: string;
   created_at: string;
 };
