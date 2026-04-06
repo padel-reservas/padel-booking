@@ -66,12 +66,22 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
   }, [loadTournamentPlayers]);
 
   return (
-    <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-      <h2>🏆 Torneo Greenwich Padel</h2>
-      <p>Test — si ves esto el componente funciona</p>
-      <p>loading: {String(loading)}</p>
-      <p>tournamentPlayers: {tournamentPlayers.length}</p>
-      <p>myPlayerName: {myPlayerName || '(vacío)'}</p>
+    <div style={{ display: 'grid', gap: 16 }}>
+
+      <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+        <h2 style={{ marginTop: 0, marginBottom: 4 }}>🏆 Torneo Greenwich Padel</h2>
+        <p style={{ color: '#64748b', marginBottom: 0 }}>
+          Anotate si querés participar. Mínimo {MIN_MATCHES} partidos jugados para ser elegible.
+        </p>
+      </div>
+
+      <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+        <p>myPlayerName: {myPlayerName || '(vacío)'}</p>
+        <p>loading: {String(loading)}</p>
+        <p>confirmados: {tournamentPlayers.filter(tp => tp.status === 'confirmed').length}</p>
+        <p>no juegan: {tournamentPlayers.filter(tp => tp.status === 'not_playing').length}</p>
+      </div>
+
     </div>
   );
 }
