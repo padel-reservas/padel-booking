@@ -231,7 +231,7 @@ export type ActivityMatch = Match & {
 export type TournamentPlayer = {
   id: number;
   player_name: string;
-  status: 'confirmed' | 'withdrawn';
+  status: 'confirmed' | 'withdrawn' | 'not_playing';
   created_at: string;
   updated_at: string;
 };
