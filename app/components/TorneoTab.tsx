@@ -1,9 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import type { RankingPlayer, Slot, SlotPlayer, SlotPlayerWithPaymentUI } from '../lib/padelTypes';
 
-const MIN_MATCHES = 5;
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 type Props = {
   rankingPlayers: RankingPlayer[];
@@ -13,13 +17,42 @@ type Props = {
 };
 
 export default function TorneoTab({ myPlayerName }: Props) {
+  const [status, setStatus] = useState('cargando...');
+  const [count, setCount] = useState<number | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const { data, error } = await supabase
+          .from('tournament_players')
+          .select('*')
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          setStatus('error supabase');
+          setErrorMsg(error.message);
+          return;
+        }
+
+        setCount(data?.length ?? 0);
+        setStatus('ok');
+      } catch (e: any) {
+        setStatus('excepcion');
+        setErrorMsg(e?.message || 'error desconocido');
+      }
+    }
+
+    load();
+  }, []);
+
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-        <h2 style={{ marginTop: 0, marginBottom: 4 }}>🏆 Torneo Greenwich Padel</h2>
-        <p>myPlayerName: {myPlayerName || '(vacío)'}</p>
-        <p>Sin query a Supabase — ¿se queda?</p>
-      </div>
+    <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+      <h2>🏆 Torneo — Debug</h2>
+      <p>myPlayerName: {myPlayerName || '(vacío)'}</p>
+      <p>status: {status}</p>
+      {count !== null && <p>registros: {count}</p>}
+      {errorMsg && <p style={{ color: 'red' }}>error: {errorMsg}</p>}
     </div>
   );
 }
