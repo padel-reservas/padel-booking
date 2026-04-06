@@ -79,8 +79,10 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     (tp) => normalizeName(tp.player_name) === normalizeName(myPlayerName)
   );
   const isConfirmed = myRecord?.status === 'confirmed';
+  const isNotPlaying = myRecord?.status === 'not_playing';
 
   const confirmedPlayers = tournamentPlayers.filter((tp) => tp.status === 'confirmed');
+  const notPlayingPlayers = tournamentPlayers.filter((tp) => tp.status === 'not_playing');
 
   async function handleConfirm() {
     if (!myPlayerName) {
@@ -92,10 +94,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     setSaving(true);
 
     const { error } = await supabase.from('tournament_players').upsert(
-      {
-        player_name: myPlayerName.trim(),
-        status: 'confirmed',
-      },
+      { player_name: myPlayerName.trim(), status: 'confirmed' },
       { onConflict: 'player_name' }
     );
 
@@ -109,16 +108,37 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     await loadTournamentPlayers();
   }
 
+  async function handleNotPlaying() {
+    if (!myPlayerName) {
+      alert('Primero elegí tu jugador en la tab Ranking.');
+      return;
+    }
+    if (!isEligible) return;
+
+    setSaving(true);
+
+    const { error } = await supabase.from('tournament_players').upsert(
+      { player_name: myPlayerName.trim(), status: 'not_playing' },
+      { onConflict: 'player_name' }
+    );
+
+    setSaving(false);
+
+    if (error) {
+      alert(`No se pudo guardar: ${error.message}`);
+      return;
+    }
+
+    await loadTournamentPlayers();
+  }
+
   async function handleWithdraw() {
     if (!myPlayerName) return;
 
     setSaving(true);
 
     const { error } = await supabase.from('tournament_players').upsert(
-      {
-        player_name: myPlayerName.trim(),
-        status: 'withdrawn',
-      },
+      { player_name: myPlayerName.trim(), status: 'withdrawn' },
       { onConflict: 'player_name' }
     );
 
@@ -134,6 +154,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+
       {/* Header */}
       <div
         style={{
@@ -172,6 +193,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
             )}
           </div>
 
+          {/* No elegible */}
           {!isEligible && (
             <div
               style={{
@@ -179,39 +201,57 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                 border: '1px solid #fde68a',
                 borderRadius: 12,
                 padding: '10px 14px',
-                marginBottom: 12,
                 fontSize: 13,
                 color: '#92400e',
                 fontWeight: 700,
               }}
             >
               Necesitás al menos {MIN_MATCHES} partidos para anotarte.
-              {matchesPlayed + futureSlots < MIN_MATCHES && futureSlots > 0 && (
-                <span> (Tenés {matchesPlayed + futureSlots} entre jugados y futuros)</span>
-              )}
             </div>
           )}
 
-          {isEligible && !isConfirmed && (
-            <button
-              onClick={handleConfirm}
-              disabled={saving}
-              style={{
-                padding: '12px 20px',
-                borderRadius: 12,
-                border: 'none',
-                background: '#111827',
-                color: 'white',
-                cursor: saving ? 'default' : 'pointer',
-                fontWeight: 700,
-                fontSize: 15,
-                opacity: saving ? 0.7 : 1,
-              }}
-            >
-              {saving ? 'Guardando...' : '✅ Quiero jugar el torneo'}
-            </button>
+          {/* Elegible sin responder todavía */}
+          {isEligible && !isConfirmed && !isNotPlaying && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={handleConfirm}
+                disabled={saving}
+                style={{
+                  padding: '12px 20px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: '#111827',
+                  color: 'white',
+                  cursor: saving ? 'default' : 'pointer',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? 'Guardando...' : '✅ Quiero jugar'}
+              </button>
+
+              <button
+                onClick={handleNotPlaying}
+                disabled={saving}
+                style={{
+                  padding: '12px 20px',
+                  borderRadius: 12,
+                  border: '1px solid #d1d5db',
+                  background: 'white',
+                  color: '#374151',
+                  cursor: saving ? 'default' : 'pointer',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? '...' : '❌ No puedo jugar'}
+              </button>
+            </div>
           )}
 
+          {/* Confirmado */}
           {isConfirmed && (
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <div
@@ -246,6 +286,42 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
               </button>
             </div>
           )}
+
+          {/* No puede jugar */}
+          {isNotPlaying && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div
+                style={{
+                  background: '#fee2e2',
+                  border: '1px solid #fca5a5',
+                  borderRadius: 12,
+                  padding: '10px 16px',
+                  fontWeight: 800,
+                  color: '#991b1b',
+                  fontSize: 14,
+                }}
+              >
+                ❌ No vas a jugar el torneo
+              </div>
+
+              <button
+                onClick={handleConfirm}
+                disabled={saving}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid #d1d5db',
+                  background: 'white',
+                  cursor: saving ? 'default' : 'pointer',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? '...' : 'Me anoto'}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div
@@ -261,7 +337,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
         </div>
       )}
 
-      {/* Lista de confirmados */}
+      {/* Confirmados */}
       <div
         style={{
           background: 'white',
@@ -326,6 +402,66 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
           </div>
         )}
       </div>
+
+      {/* No pueden jugar */}
+      {notPlayingPlayers.length > 0 && (
+        <div
+          style={{
+            background: 'white',
+            borderRadius: 20,
+            padding: 20,
+            border: '1px solid #e5e7eb',
+          }}
+        >
+          <h3 style={{ marginTop: 0, marginBottom: 12, color: '#991b1b' }}>
+            No pueden jugar ({notPlayingPlayers.length})
+          </h3>
+
+          <div style={{ display: 'grid', gap: 8 }}>
+            {notPlayingPlayers.map((tp) => {
+              const isMe =
+                myPlayerName &&
+                normalizeName(tp.player_name) === normalizeName(myPlayerName);
+
+              return (
+                <div
+                  key={tp.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 14px',
+                    borderRadius: 12,
+                    background: isMe ? '#fef2f2' : '#f8fafc',
+                    border: isMe ? '1px solid #fca5a5' : '1px solid #e5e7eb',
+                    fontWeight: isMe ? 800 : 600,
+                    color: '#6b7280',
+                  }}
+                >
+                  <span>❌</span>
+                  <span>{tp.player_name}</span>
+                  {isMe && (
+                    <span
+                      style={{
+                        marginLeft: 'auto',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: '#991b1b',
+                        background: '#fee2e2',
+                        border: '1px solid #fca5a5',
+                        borderRadius: 999,
+                        padding: '2px 8px',
+                      }}
+                    >
+                      Vos
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
