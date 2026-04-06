@@ -233,5 +233,5 @@ export type TournamentPlayer = {
   player_name: string;
   status: 'confirmed' | 'withdrawn' | 'not_playing';
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 };
