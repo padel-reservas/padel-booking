@@ -3507,7 +3507,7 @@ export default function Page() {
           activityData={activityData}
         />
       )}
-{!loading && activeTab === 'torneo' && (
+{activeTab === 'torneo' && (
   <TorneoTab
     rankingPlayers={rankingPlayers}
     slots={slots}
