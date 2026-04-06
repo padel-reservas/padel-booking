@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import type { RankingPlayer, Slot, SlotPlayer, TournamentPlayer } from '../lib/padelTypes';
+import type { RankingPlayer, Slot, SlotPlayer, SlotPlayerWithPaymentUI, TournamentPlayer } from '../lib/padelTypes';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,7 +14,7 @@ const MIN_MATCHES = 5;
 type Props = {
   rankingPlayers: RankingPlayer[];
   slots: Slot[];
-  slotPlayers: SlotPlayer[];
+  slotPlayers: (SlotPlayer | SlotPlayerWithPaymentUI)[];
   myPlayerName: string;
 };
 
@@ -25,7 +25,7 @@ function normalizeName(name: string) {
 function getFutureSlotCount(
   playerName: string,
   slots: Slot[],
-  slotPlayers: SlotPlayer[]
+  slotPlayers: (SlotPlayer | SlotPlayerWithPaymentUI)[]
 ): number {
   const todayStr = new Date().toISOString().slice(0, 10);
   const futureSlotIds = slots
@@ -358,7 +358,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
           <div style={{ display: 'grid', gap: 8 }}>
             {confirmedPlayers.map((tp, index) => {
               const isMe =
-                myPlayerName &&
+                !!myPlayerName &&
                 normalizeName(tp.player_name) === normalizeName(myPlayerName);
 
               return (
@@ -420,7 +420,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
           <div style={{ display: 'grid', gap: 8 }}>
             {notPlayingPlayers.map((tp) => {
               const isMe =
-                myPlayerName &&
+                !!myPlayerName &&
                 normalizeName(tp.player_name) === normalizeName(myPlayerName);
 
               return (
