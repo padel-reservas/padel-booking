@@ -3511,7 +3511,7 @@ export default function Page() {
   <TorneoTab
     rankingPlayers={rankingPlayers}
     slots={slots}
-    slotPlayers={slotPlayers}
+    slotPlayers={[]}
     myPlayerName={myPlayerName}
   />
 )}
