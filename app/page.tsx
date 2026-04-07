@@ -3507,15 +3507,14 @@ export default function Page() {
           activityData={activityData}
         />
       )}
-{activeTab === 'torneo' && (
+{!loading && activeTab === 'torneo' && (
   <TorneoTab
     rankingPlayers={rankingPlayers}
     slots={slots}
-    slotPlayers={[]}
+    slotPlayers={slotPlayers}
     myPlayerName={myPlayerName}
   />
-)}
-      <ResultModal
+)}      <ResultModal
         resultModalOpen={resultModalOpen}
         resultForm={resultForm}
         savingResult={savingResult}
