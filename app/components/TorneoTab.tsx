@@ -16,6 +16,7 @@ type Props = {
   slots: Slot[];
   slotPlayers: (SlotPlayer | SlotPlayerWithPaymentUI)[];
   myPlayerName: string;
+  adminUnlocked: boolean;
 };
 
 function normalizeName(name: string) {
@@ -39,10 +40,11 @@ function getFutureSlotCount(
   ).length;
 }
 
-export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayerName }: Props) {
+export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayerName, adminUnlocked }: Props) {
   const [tournamentPlayers, setTournamentPlayers] = useState<TournamentPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [adminSelectedPlayer, setAdminSelectedPlayer] = useState('');
 
   const loadTournamentPlayers = useCallback(async () => {
     setLoading(true);
@@ -81,6 +83,19 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
   const isConfirmed = myRecord?.status === 'confirmed';
 
   const confirmedPlayers = tournamentPlayers.filter((tp) => tp.status === 'confirmed');
+
+  // Jugadores elegibles que no están confirmados todavía — para el dropdown admin
+  const eligibleNotConfirmed = rankingPlayers
+    .filter((p) => {
+      const pFutureSlots = getFutureSlotCount(p.name, slots, slotPlayers);
+      const pMatchesPlayed = p.matches_played ?? 0;
+      const pEligible = pMatchesPlayed >= MIN_MATCHES || pMatchesPlayed + pFutureSlots >= MIN_MATCHES;
+      const alreadyConfirmed = confirmedPlayers.some(
+        (tp) => normalizeName(tp.player_name) === normalizeName(p.name)
+      );
+      return pEligible && !alreadyConfirmed;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   async function handleConfirm() {
     if (!myPlayerName) {
@@ -126,8 +141,55 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     await loadTournamentPlayers();
   }
 
+  async function handleAdminAdd() {
+    if (!adminSelectedPlayer) {
+      alert('Elegí un jugador para agregar.');
+      return;
+    }
+
+    setSaving(true);
+
+    const { error } = await supabase.from('tournament_players').upsert(
+      { player_name: adminSelectedPlayer.trim(), status: 'confirmed' },
+      { onConflict: 'player_name' }
+    );
+
+    setSaving(false);
+
+    if (error) {
+      alert(`No se pudo agregar: ${error.message}`);
+      return;
+    }
+
+    setAdminSelectedPlayer('');
+    await loadTournamentPlayers();
+  }
+
+  async function handleAdminRemove(playerName: string) {
+    const ok = window.confirm(`¿Seguro que querés sacar a ${playerName} del torneo?`);
+    if (!ok) return;
+
+    setSaving(true);
+
+    const { error } = await supabase.from('tournament_players').upsert(
+      { player_name: playerName.trim(), status: 'withdrawn' },
+      { onConflict: 'player_name' }
+    );
+
+    setSaving(false);
+
+    if (error) {
+      alert(`No se pudo sacar: ${error.message}`);
+      return;
+    }
+
+    await loadTournamentPlayers();
+  }
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+
+      {/* Header */}
       <div
         style={{
           background: 'white',
@@ -142,6 +204,65 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
         </p>
       </div>
 
+      {/* Panel admin */}
+      {adminUnlocked && (
+        <div
+          style={{
+            background: 'white',
+            borderRadius: 20,
+            padding: 20,
+            border: '2px solid #111827',
+          }}
+        >
+          <h3 style={{ marginTop: 0, marginBottom: 12 }}>Admin — Gestión de inscriptos</h3>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <select
+              value={adminSelectedPlayer}
+              onChange={(e) => setAdminSelectedPlayer(e.target.value)}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 12,
+                border: '1px solid #d1d5db',
+                background: 'white',
+                minWidth: 200,
+              }}
+            >
+              <option value="">Elegí un jugador...</option>
+              {eligibleNotConfirmed.map((p) => (
+                <option key={p.id} value={p.name}>
+                  {p.name} ({p.matches_played} partidos)
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={handleAdminAdd}
+              disabled={saving || !adminSelectedPlayer}
+              style={{
+                padding: '10px 16px',
+                borderRadius: 12,
+                border: 'none',
+                background: '#111827',
+                color: 'white',
+                cursor: saving || !adminSelectedPlayer ? 'default' : 'pointer',
+                fontWeight: 700,
+                opacity: saving || !adminSelectedPlayer ? 0.5 : 1,
+              }}
+            >
+              Agregar al torneo
+            </button>
+          </div>
+
+          {eligibleNotConfirmed.length === 0 && (
+            <div style={{ marginTop: 10, fontSize: 13, color: '#64748b' }}>
+              Todos los jugadores elegibles ya están confirmados.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mi estado */}
       {myPlayerName ? (
         <div
           style={{
@@ -249,6 +370,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
         </div>
       )}
 
+      {/* Confirmados */}
       <div
         style={{
           background: 'white',
@@ -306,6 +428,24 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                     >
                       Vos
                     </span>
+                  )}
+                  {adminUnlocked && (
+                    <button
+                      onClick={() => handleAdminRemove(tp.player_name)}
+                      style={{
+                        marginLeft: isMe ? 8 : 'auto',
+                        padding: '4px 10px',
+                        borderRadius: 8,
+                        border: '1px solid #d1d5db',
+                        background: 'white',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: '#6b7280',
+                      }}
+                    >
+                      Sacar
+                    </button>
                   )}
                 </div>
               );
