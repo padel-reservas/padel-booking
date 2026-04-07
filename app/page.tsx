@@ -177,7 +177,7 @@ function formatAlternativeLine(alt: SuggestionAlternative) {
 }
 
 export default function Page() {
-  const [activeTab, setActiveTab] = useState<TabKey>('turnos');
+  const [activeTab, setActiveTab] = useState<TabKey>('torneo');
 
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotPlayers, setSlotPlayers] = useState<SlotPlayer[]>([]);
