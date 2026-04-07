@@ -3513,8 +3513,9 @@ export default function Page() {
     slots={slots}
     slotPlayers={slotPlayers}
     myPlayerName={myPlayerName}
+    adminUnlocked={adminUnlocked}
   />
-)}      <ResultModal
+)}   <ResultModal
         resultModalOpen={resultModalOpen}
         resultForm={resultForm}
         savingResult={savingResult}
