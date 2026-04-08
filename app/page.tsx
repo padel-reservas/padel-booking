@@ -2997,6 +2997,24 @@ export default function Page() {
                   <div style={{ fontWeight: isBooking ? 800 : 700, color: '#111827' }}>
                     {s.message}
                   </div>
+                  {isBooking && s.suggested_date && (
+  <div
+    style={{
+      marginTop: 8,
+      padding: '8px 12px',
+      borderRadius: 10,
+      background: '#fff7ed',
+      border: '1px solid #fed7aa',
+      fontSize: 13,
+      fontWeight: 800,
+      color: '#9a3412',
+      display: 'inline-block',
+    }}
+  >
+    📅 {s.suggested_date}
+    {s.suggested_time && ` — ${s.suggested_time.slice(0, 5)}`}
+  </div>
+)}
 
                   <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
                     {s.author_name} • {new Date(s.created_at).toLocaleString()}
