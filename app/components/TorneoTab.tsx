@@ -45,6 +45,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [adminSelectedPlayer, setAdminSelectedPlayer] = useState('');
+  const [adminSelectedPlayerOverride, setAdminSelectedPlayerOverride] = useState('');
 
   const loadTournamentPlayers = useCallback(async () => {
     setLoading(true);
@@ -84,7 +85,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
 
   const confirmedPlayers = tournamentPlayers.filter((tp) => tp.status === 'confirmed');
 
-  // Jugadores elegibles que no están confirmados todavía — para el dropdown admin
+  // Jugadores elegibles no confirmados — dropdown normal
   const eligibleNotConfirmed = rankingPlayers
     .filter((p) => {
       const pFutureSlots = getFutureSlotCount(p.name, slots, slotPlayers);
@@ -94,6 +95,16 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
         (tp) => normalizeName(tp.player_name) === normalizeName(p.name)
       );
       return pEligible && !alreadyConfirmed;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Todos los jugadores no confirmados — dropdown override admin
+  const allNotConfirmed = rankingPlayers
+    .filter((p) => {
+      const alreadyConfirmed = confirmedPlayers.some(
+        (tp) => normalizeName(tp.player_name) === normalizeName(p.name)
+      );
+      return !alreadyConfirmed;
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -165,6 +176,30 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     await loadTournamentPlayers();
   }
 
+  async function handleAdminAddOverride() {
+    if (!adminSelectedPlayerOverride) {
+      alert('Elegí un jugador para agregar.');
+      return;
+    }
+
+    setSaving(true);
+
+    const { error } = await supabase.from('tournament_players').upsert(
+      { player_name: adminSelectedPlayerOverride.trim(), status: 'confirmed' },
+      { onConflict: 'player_name' }
+    );
+
+    setSaving(false);
+
+    if (error) {
+      alert(`No se pudo agregar: ${error.message}`);
+      return;
+    }
+
+    setAdminSelectedPlayerOverride('');
+    await loadTournamentPlayers();
+  }
+
   async function handleAdminRemove(playerName: string) {
     const ok = window.confirm(`¿Seguro que querés sacar a ${playerName} del torneo?`);
     if (!ok) return;
@@ -214,51 +249,100 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
             border: '2px solid #111827',
           }}
         >
-          <h3 style={{ marginTop: 0, marginBottom: 12 }}>Admin — Gestión de inscriptos</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 16 }}>Admin — Gestión de inscriptos</h3>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <select
-              value={adminSelectedPlayer}
-              onChange={(e) => setAdminSelectedPlayer(e.target.value)}
-              style={{
-                padding: '10px 12px',
-                borderRadius: 12,
-                border: '1px solid #d1d5db',
-                background: 'white',
-                minWidth: 200,
-              }}
-            >
-              <option value="">Elegí un jugador...</option>
-              {eligibleNotConfirmed.map((p) => (
-                <option key={p.id} value={p.name}>
-                  {p.name} ({p.matches_played} partidos)
-                </option>
-              ))}
-            </select>
+          {/* Agregar elegible */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 700 }}>
+              Agregar jugador elegible
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <select
+                value={adminSelectedPlayer}
+                onChange={(e) => setAdminSelectedPlayer(e.target.value)}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  border: '1px solid #d1d5db',
+                  background: 'white',
+                  minWidth: 200,
+                }}
+              >
+                <option value="">Elegí un jugador...</option>
+                {eligibleNotConfirmed.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name} ({p.matches_played} partidos)
+                  </option>
+                ))}
+              </select>
 
-            <button
-              onClick={handleAdminAdd}
-              disabled={saving || !adminSelectedPlayer}
-              style={{
-                padding: '10px 16px',
-                borderRadius: 12,
-                border: 'none',
-                background: '#111827',
-                color: 'white',
-                cursor: saving || !adminSelectedPlayer ? 'default' : 'pointer',
-                fontWeight: 700,
-                opacity: saving || !adminSelectedPlayer ? 0.5 : 1,
-              }}
-            >
-              Agregar al torneo
-            </button>
+              <button
+                onClick={handleAdminAdd}
+                disabled={saving || !adminSelectedPlayer}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: '#111827',
+                  color: 'white',
+                  cursor: saving || !adminSelectedPlayer ? 'default' : 'pointer',
+                  fontWeight: 700,
+                  opacity: saving || !adminSelectedPlayer ? 0.5 : 1,
+                }}
+              >
+                Agregar
+              </button>
+            </div>
           </div>
 
-          {eligibleNotConfirmed.length === 0 && (
-            <div style={{ marginTop: 10, fontSize: 13, color: '#64748b' }}>
-              Todos los jugadores elegibles ya están confirmados.
+          {/* Agregar cualquier jugador — override admin */}
+          <div
+            style={{
+              paddingTop: 16,
+              borderTop: '1px solid #e5e7eb',
+            }}
+          >
+            <div style={{ fontSize: 12, color: '#92400e', marginBottom: 6, fontWeight: 700 }}>
+              Agregar jugador sin mínimo de partidos (override admin)
             </div>
-          )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <select
+                value={adminSelectedPlayerOverride}
+                onChange={(e) => setAdminSelectedPlayerOverride(e.target.value)}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  border: '1px solid #fde68a',
+                  background: '#fffbeb',
+                  minWidth: 200,
+                }}
+              >
+                <option value="">Elegí un jugador...</option>
+                {allNotConfirmed.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name} ({p.matches_played} partidos)
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={handleAdminAddOverride}
+                disabled={saving || !adminSelectedPlayerOverride}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: '#92400e',
+                  color: 'white',
+                  cursor: saving || !adminSelectedPlayerOverride ? 'default' : 'pointer',
+                  fontWeight: 700,
+                  opacity: saving || !adminSelectedPlayerOverride ? 0.5 : 1,
+                }}
+              >
+                Agregar igual
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
