@@ -37,6 +37,8 @@ type TournamentMatch = {
   winner_pair_id: number | null;
   elo_multiplier: number;
   status: 'pending' | 'played' | 'walkover';
+  match_day: number | null;
+  match_day_order: number | null;
 };
 
 type GroupStanding = {
@@ -122,22 +124,6 @@ const groupColors: Record<string, { bg: string; border: string; text: string }> 
   D: { bg: '#fdf4ff', border: '#e9d5ff', text: '#7e22ce' },
 };
 
-const roundLabels: Record<string, string> = {
-  groups: 'Fase de grupos',
-  quarters: 'Cuartos de final',
-  semis: 'Semifinales',
-  final: 'Final',
-  third_place: '3er puesto',
-};
-
-const roundDeadlines: Record<string, string> = {
-  groups: '27 de abril',
-  quarters: '4 de mayo',
-  semis: '11 de mayo',
-  final: '16 de mayo',
-  third_place: '16 de mayo',
-};
-
 export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayerName, adminUnlocked }: Props) {
   const [tournamentPlayers, setTournamentPlayers] = useState<TournamentPlayer[]>([]);
   const [tournamentPairs, setTournamentPairs] = useState<TournamentPair[]>([]);
@@ -162,7 +148,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     ] = await Promise.all([
       supabase.from('tournament_players').select('*').order('created_at', { ascending: true }),
       supabase.from('tournament_pairs').select('*').order('combined_rating', { ascending: false }),
-      supabase.from('tournament_matches').select('*').eq('tournament_id', TOURNAMENT_ID).order('group_name').order('id'),
+      supabase.from('tournament_matches').select('*').eq('tournament_id', TOURNAMENT_ID).order('group_name').order('match_day').order('match_day_order'),
       supabase.from('tournament_group_standings').select('*').eq('tournament_id', TOURNAMENT_ID),
     ]);
 
@@ -299,7 +285,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
   }
 
   async function handleGenerateMatches() {
-    const ok = window.confirm('¿Generar todos los partidos de grupos? Esto borrará los partidos existentes.');
+    const ok = window.confirm('¿Generar todos los partidos de grupos? Esto borrará los partidos de grupos existentes.');
     if (!ok) return;
 
     setSaving(true);
@@ -338,15 +324,26 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
 
     setSaving(true);
 
-    const { error } = await supabase
+    const { error: deleteMatches } = await supabase
+      .from('tournament_matches')
+      .delete()
+      .eq('tournament_id', TOURNAMENT_ID);
+
+    if (deleteMatches) {
+      alert(`No se pudieron borrar los partidos: ${deleteMatches.message}`);
+      setSaving(false);
+      return;
+    }
+
+    const { error: deletePairs } = await supabase
       .from('tournament_pairs')
       .delete()
       .eq('tournament_id', TOURNAMENT_ID);
 
     setSaving(false);
 
-    if (error) {
-      alert(`No se pudieron borrar las parejas: ${error.message}`);
+    if (deletePairs) {
+      alert(`No se pudieron borrar las parejas: ${deletePairs.message}`);
       return;
     }
 
@@ -371,7 +368,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     const match = tournamentMatches.find((m) => m.id === matchId);
     if (!match) return;
 
-    // Determinar ganador
     let setsP1 = 0;
     let setsP2 = 0;
     if (s1p1 > s1p2) setsP1++; else setsP2++;
@@ -502,7 +498,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
         <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '2px solid #111827' }}>
           <h3 style={{ marginTop: 0, marginBottom: 16 }}>Admin — Gestión del torneo</h3>
 
-          {/* Agregar elegible */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 700 }}>Agregar jugador elegible</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -520,7 +515,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
             </div>
           </div>
 
-          {/* Override */}
           <div style={{ paddingTop: 16, borderTop: '1px solid #e5e7eb', marginBottom: 16 }}>
             <div style={{ fontSize: 12, color: '#92400e', marginBottom: 6, fontWeight: 700 }}>Agregar sin mínimo de partidos (override)</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -538,7 +532,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
             </div>
           </div>
 
-          {/* Generar parejas y partidos */}
           <div style={{ paddingTop: 16, borderTop: '1px solid #e5e7eb' }}>
             <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10, fontWeight: 700 }}>Armado de parejas, grupos y partidos</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -562,7 +555,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
               )}
             </div>
 
-            {/* Preview parejas */}
             {showPairGenerator && generatedPairs.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <div style={{ fontWeight: 800, marginBottom: 10 }}>Preview — {generatedPairs.length} parejas:</div>
@@ -642,18 +634,21 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
 
           {isConfirmed && myPair && (
             <div style={{ display: 'grid', gap: 10 }}>
-              <div style={{ background: myPair.group_name ? groupColors[myPair.group_name].bg : '#f8fafc', border: `1px solid ${myPair.group_name ? groupColors[myPair.group_name].border : '#e5e7eb'}`, borderRadius: 12, padding: '12px 16px' }}>
+              <div style={{
+                background: myPair.group_name ? groupColors[myPair.group_name].bg : '#f8fafc',
+                border: `1px solid ${myPair.group_name ? groupColors[myPair.group_name].border : '#e5e7eb'}`,
+                borderRadius: 12, padding: '12px 16px'
+              }}>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Tu pareja</div>
                 <div style={{ fontWeight: 800, fontSize: 16, color: '#111827' }}>
                   {myPair.player1_name} / {myPair.player2_name}
                 </div>
                 {myPair.group_name && (
-                  <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, color: myPair.group_name ? groupColors[myPair.group_name].text : '#374151' }}>
+                  <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, color: groupColors[myPair.group_name].text }}>
                     Grupo {myPair.group_name}
                   </div>
                 )}
               </div>
-
               <button onClick={handleWithdraw} disabled={saving}
                 style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid #d1d5db', background: 'white', cursor: saving ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.7 : 1, width: 'fit-content' }}>
                 {saving ? '...' : 'Me bajo'}
@@ -708,14 +703,14 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                               {s.player1_name} / {s.player2_name}
                             </span>
                             <span style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 12, color: '#6b7280' }}>
-                              <span title="Puntos" style={{ fontWeight: 800, color: '#111827' }}>{s.points}pts</span>
-                              <span title="Sets">{s.sets_won}-{s.sets_lost}</span>
-                              <span title="Games">{s.games_won}-{s.games_lost}</span>
+                              <span style={{ fontWeight: 800, color: '#111827' }}>{s.points}pts</span>
+                              <span>{s.sets_won}-{s.sets_lost}</span>
+                              <span>{s.games_won}-{s.games_lost}</span>
                             </span>
                             {advances && (
                               <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 6px' }}>
                                 Avanza
-              </span>
+                              </span>
                             )}
                           </div>
                         );
@@ -724,113 +719,134 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                   </div>
                 )}
 
-                {/* Partidos */}
+                {/* Partidos agrupados por fecha */}
                 {matches.length > 0 && (
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 8 }}>PARTIDOS</div>
-                    <div style={{ display: 'grid', gap: 8 }}>
-                      {matches.map((match) => {
-                        const isMine = isMyMatch(match);
-                        const isPlayed = match.status === 'played';
-                        const pair1Name = getPairName(match.pair1_id);
-                        const pair2Name = getPairName(match.pair2_id);
+                    {[1, 2, 3].map((day) => {
+                      const dayMatches = matches
+                        .filter((m) => m.match_day === day)
+                        .sort((a, b) => (a.match_day_order ?? 0) - (b.match_day_order ?? 0));
+                      if (dayMatches.length === 0) return null;
 
-                        return (
-                          <div key={match.id} style={{
-                            padding: '12px 14px', borderRadius: 12,
-                            background: isMine ? colors.bg : '#f8fafc',
-                            border: isMine ? `1px solid ${colors.border}` : '1px solid #e5e7eb',
+                      const allPlayed = dayMatches.every((m) => m.status === 'played');
+
+                      return (
+                        <div key={day} style={{ marginBottom: 14 }}>
+                          <div style={{
+                            fontSize: 12, fontWeight: 800,
+                            color: allPlayed ? '#166534' : day === 3 ? '#9a3412' : '#6b7280',
+                            marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6
                           }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <div style={{ fontWeight: isMine ? 800 : 600, fontSize: 13 }}>
-                                {pair1Name}
-                                <span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>
-                                {pair2Name}
-                              </div>
-
-                              {isPlayed && (
-                                <div style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>
-                                  {match.set1_pair1}-{match.set1_pair2}
-                                  {match.set2_pair1 != null && ` / ${match.set2_pair1}-${match.set2_pair2}`}
-                                  {match.set3_pair1 != null && ` / ${match.set3_pair1}-${match.set3_pair2}`}
-                                </div>
-                              )}
-
-                              {!isPlayed && (
-                                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 700, background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 999, padding: '2px 8px' }}>
-                                  Pendiente
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Cargar resultado — admin o pareja involucrada */}
-                            {!isPlayed && (adminUnlocked || isMine) && (
-                              <div style={{ marginTop: 10 }}>
-                                {resultForm?.matchId === match.id ? (
-                                  <div style={{ display: 'grid', gap: 8 }}>
-                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                                      <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 700, minWidth: 40 }}>Set 1</span>
-                                      <input type="number" min="0" max="7" value={resultForm.set1p1}
-                                        onChange={(e) => setResultForm({ ...resultForm, set1p1: e.target.value })}
-                                        style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
-                                      <span style={{ color: '#9ca3af' }}>-</span>
-                                      <input type="number" min="0" max="7" value={resultForm.set1p2}
-                                        onChange={(e) => setResultForm({ ...resultForm, set1p2: e.target.value })}
-                                        style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
-                                    </div>
-                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                                      <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 700, minWidth: 40 }}>Set 2</span>
-                                      <input type="number" min="0" max="7" value={resultForm.set2p1}
-                                        onChange={(e) => setResultForm({ ...resultForm, set2p1: e.target.value })}
-                                        style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
-                                      <span style={{ color: '#9ca3af' }}>-</span>
-                                      <input type="number" min="0" max="7" value={resultForm.set2p2}
-                                        onChange={(e) => setResultForm({ ...resultForm, set2p2: e.target.value })}
-                                        style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
-                                    </div>
-                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                                      <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 700, minWidth: 40 }}>Set 3</span>
-                                      <input type="number" min="0" max="7" value={resultForm.set3p1}
-                                        onChange={(e) => setResultForm({ ...resultForm, set3p1: e.target.value })}
-                                        style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
-                                      <span style={{ color: '#9ca3af' }}>-</span>
-                                      <input type="number" min="0" max="7" value={resultForm.set3p2}
-                                        onChange={(e) => setResultForm({ ...resultForm, set3p2: e.target.value })}
-                                        style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
-                                      <span style={{ fontSize: 11, color: '#9ca3af' }}>(si hubo)</span>
-                                    </div>
-                                    <div style={{ display: 'flex', gap: 8 }}>
-                                      <button onClick={handleSaveResult} disabled={saving}
-                                        style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: '#111827', color: 'white', cursor: saving ? 'default' : 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
-                                        {saving ? 'Guardando...' : 'Guardar resultado'}
-                                      </button>
-                                      <button onClick={() => setResultForm(null)}
-                                        style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700 }}>
-                                        Cancelar
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={() => setResultForm({ matchId: match.id, set1p1: '', set1p2: '', set2p1: '', set2p2: '', set3p1: '', set3p2: '' })}
-                                    style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
-                                    Cargar resultado
-                                  </button>
-                                )}
-                              </div>
-                            )}
+                            {day === 3 ? '🔥 FECHA 3 — El decisivo' : `FECHA ${day}`}
+                            {allPlayed && <span style={{ fontSize: 11, color: '#166534' }}>✅ Completada</span>}
                           </div>
-                        );
-                      })}
-                    </div>
+                          <div style={{ display: 'grid', gap: 8 }}>
+                            {dayMatches.map((match) => {
+                              const isMine = isMyMatch(match);
+                              const isPlayed = match.status === 'played';
+                              const pair1Name = getPairName(match.pair1_id);
+                              const pair2Name = getPairName(match.pair2_id);
+
+                              return (
+                                <div key={match.id} style={{
+                                  padding: '12px 14px', borderRadius: 12,
+                                  background: isMine ? colors.bg : '#f8fafc',
+                                  border: isMine ? `1px solid ${colors.border}` : '1px solid #e5e7eb',
+                                }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <div style={{ fontWeight: isMine ? 800 : 600, fontSize: 13 }}>
+                                      {pair1Name}
+                                      <span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>
+                                      {pair2Name}
+                                    </div>
+
+                                    {isPlayed && (
+                                      <div style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>
+                                        {match.set1_pair1}-{match.set1_pair2}
+                                        {match.set2_pair1 != null && ` / ${match.set2_pair1}-${match.set2_pair2}`}
+                                        {match.set3_pair1 != null && ` / ${match.set3_pair1}-${match.set3_pair2}`}
+                                      </div>
+                                    )}
+
+                                    {!isPlayed && (
+                                      <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 700, background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 999, padding: '2px 8px' }}>
+                                        Pendiente
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {!isPlayed && (adminUnlocked || isMine) && (
+                                    <div style={{ marginTop: 10 }}>
+                                      {resultForm?.matchId === match.id ? (
+                                        <div style={{ display: 'grid', gap: 8 }}>
+                                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                            <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 700, minWidth: 40 }}>Set 1</span>
+                                            <input type="number" min="0" max="7" value={resultForm.set1p1}
+                                              onChange={(e) => setResultForm({ ...resultForm, set1p1: e.target.value })}
+                                              style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
+                                            <span style={{ color: '#9ca3af' }}>-</span>
+                                            <input type="number" min="0" max="7" value={resultForm.set1p2}
+                                              onChange={(e) => setResultForm({ ...resultForm, set1p2: e.target.value })}
+                                              style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
+                                          </div>
+                                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                            <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 700, minWidth: 40 }}>Set 2</span>
+                                            <input type="number" min="0" max="7" value={resultForm.set2p1}
+                                              onChange={(e) => setResultForm({ ...resultForm, set2p1: e.target.value })}
+                                              style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
+                                            <span style={{ color: '#9ca3af' }}>-</span>
+                                            <input type="number" min="0" max="7" value={resultForm.set2p2}
+                                              onChange={(e) => setResultForm({ ...resultForm, set2p2: e.target.value })}
+                                              style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
+                                          </div>
+                                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                            <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 700, minWidth: 40 }}>Set 3</span>
+                                            <input type="number" min="0" max="7" value={resultForm.set3p1}
+                                              onChange={(e) => setResultForm({ ...resultForm, set3p1: e.target.value })}
+                                              style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
+                                            <span style={{ color: '#9ca3af' }}>-</span>
+                                            <input type="number" min="0" max="7" value={resultForm.set3p2}
+                                              onChange={(e) => setResultForm({ ...resultForm, set3p2: e.target.value })}
+                                              style={{ width: 48, padding: '6px 8px', borderRadius: 8, border: '1px solid #d1d5db', textAlign: 'center' }} />
+                                            <span style={{ fontSize: 11, color: '#9ca3af' }}>(si hubo)</span>
+                                          </div>
+                                          <div style={{ display: 'flex', gap: 8 }}>
+                                            <button onClick={handleSaveResult} disabled={saving}
+                                              style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: '#111827', color: 'white', cursor: saving ? 'default' : 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
+                                              {saving ? 'Guardando...' : 'Guardar resultado'}
+                                            </button>
+                                            <button onClick={() => setResultForm(null)}
+                                              style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700 }}>
+                                              Cancelar
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          onClick={() => setResultForm({ matchId: match.id, set1p1: '', set1p2: '', set2p1: '', set2p2: '', set3p1: '', set3p2: '' })}
+                                          style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                                          Cargar resultado
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
-                {/* Solo parejas si no hay partidos aún */}
+                {/* Solo parejas si no hay partidos */}
                 {matches.length === 0 && (
                   <div style={{ display: 'grid', gap: 8 }}>
                     {pairs.map((pair) => {
-                      const isMyPair = normalizeName(pair.player1_name) === normalizeName(myPlayerName) ||
+                      const isMyPair =
+                        normalizeName(pair.player1_name) === normalizeName(myPlayerName) ||
                         normalizeName(pair.player2_name) === normalizeName(myPlayerName);
                       return (
                         <div key={pair.id} style={{
