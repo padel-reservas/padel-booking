@@ -667,8 +667,8 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
         </div>
       )}
 
-      {/* Grupos con partidos y posiciones */}
-      {tournamentPairs.length > 0 && (
+      {/* Grupos con partidos y posiciones — solo admin por ahora */}
+      {adminUnlocked && tournamentPairs.length > 0 && (
         <div style={{ display: 'grid', gap: 16 }}>
           {['A', 'B', 'C', 'D'].map((group) => {
             const pairs = pairsByGroup[group] || [];
