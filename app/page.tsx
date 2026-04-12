@@ -15,6 +15,7 @@ import Image from 'next/image';
 import logoDisplay from './logo-display.png';
 import { APP_VERSION } from './lib/appVersion';
 import TorneoTab from './components/TorneoTab';
+import ApuestasTab from './components/ApuestasTab';
 
 import type {
   ActivityMatch,
@@ -2341,6 +2342,7 @@ export default function Page() {
           {tabButton('Historial', 'historial')}
           {tabButton('Actividad', 'actividad')}
           {tabButton('Torneo', 'torneo')}
+          {tabButton('Apuestas', 'apuestas')}
           {canSeeAdmin && activeTab === 'turnos' && (
             <button
               onClick={() => setShowAdmin(!showAdmin)}
@@ -3533,7 +3535,15 @@ export default function Page() {
     myPlayerName={myPlayerName}
     adminUnlocked={adminUnlocked}
   />
-)}   <ResultModal
+)}  
+      {!loading && activeTab === 'apuestas' && (
+  <ApuestasTab
+    rankingPlayers={rankingPlayers}
+    myPlayerName={myPlayerName}
+    adminUnlocked={adminUnlocked}
+  />
+)}
+      <ResultModal
         resultModalOpen={resultModalOpen}
         resultForm={resultForm}
         savingResult={savingResult}
