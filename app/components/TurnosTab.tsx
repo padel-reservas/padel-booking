@@ -429,8 +429,7 @@ export default function TurnosTab({
                                 slotId: slot.id,
                                 tournament_group: input.trim().toUpperCase() || null,
                               });
-                              window.alert(JSON.stringify(result));
-                              if (result.ok) await loadData();
+                            if (result.ok) await loadData();
                             }}
                             style={secondaryButtonStyle}
                           >
