@@ -2,6 +2,7 @@ export type Slot = {
   id: number;
   date: string;
   time: string;
+  amount: number | null;
 };
 
 export type PaymentMethod = 'venmo' | 'zelle';
