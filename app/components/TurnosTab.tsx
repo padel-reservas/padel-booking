@@ -16,6 +16,7 @@ type SlotWithPlayers = {
   date: string;
   time: string;
   amount: number | null;
+  tournament_group: string | null;
   allPlayers: SlotPlayerWithPaymentUI[];
   activePlayers: SlotPlayerWithPaymentUI[];
   waitlistPlayers: SlotPlayerWithPaymentUI[];
@@ -259,7 +260,7 @@ export default function TurnosTab({
                     background: 'white',
                     borderRadius: 20,
                     padding: 18,
-                    border: '1px solid #e5e7eb',
+                    border: slot.tournament_group ? '2px solid #e9d5ff' : '1px solid #e5e7eb',
                     boxShadow: '0 2px 8px rgba(15, 23, 42, 0.05)',
                   }}
                 >
@@ -301,6 +302,22 @@ export default function TurnosTab({
                         justifyContent: 'flex-end',
                       }}
                     >
+                      {slot.tournament_group && (
+                        <div
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: 999,
+                            background: '#fdf4ff',
+                            color: '#7e22ce',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            border: '1px solid #e9d5ff',
+                          }}
+                        >
+                          🏆 Torneo — Grupo {slot.tournament_group}
+                        </div>
+                      )}
+
                       <div
                         style={{
                           padding: '6px 10px',
@@ -388,16 +405,35 @@ export default function TurnosTab({
                                 window.alert('Monto inválido.');
                                 return;
                               }
-                              await adminAction({
+                              const result = await adminAction({
                                 action: 'updateSlotAmount',
                                 slotId: slot.id,
                                 amount: parsed,
                               });
-                              await loadData();
+                              if (result.ok) await loadData();
                             }}
                             style={secondaryButtonStyle}
                           >
                             {slot.amount != null ? `💵 $${slot.amount}` : 'Agregar monto'}
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              const input = window.prompt(
+                                'Grupo del torneo (A, B, C, D) o dejá vacío para quitar:',
+                                slot.tournament_group || ''
+                              );
+                              if (input === null) return;
+                              const result = await adminAction({
+                                action: 'updateSlotTournament',
+                                slotId: slot.id,
+                                tournament_group: input.trim().toUpperCase() || null,
+                              });
+                              if (result.ok) await loadData();
+                            }}
+                            style={secondaryButtonStyle}
+                          >
+                            {slot.tournament_group ? `🏆 Grupo ${slot.tournament_group}` : 'Marcar torneo'}
                           </button>
 
                           <button
@@ -799,7 +835,7 @@ export default function TurnosTab({
                                         }
                                         style={{
                                           ...primaryButtonStyle,
-                                          background: '#166634',
+                                          background: '#166534',
                                         }}
                                       >
                                         Mark Paid
