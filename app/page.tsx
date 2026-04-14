@@ -62,6 +62,7 @@ type SlotWithPlayers = Slot & {
   waitlistPlayers: SlotPlayerWithPaymentUI[];
   match: Match | null;
   amount: number | null;
+  tournament_group: string | null;
 };
 
 type SuggestionFilter =
@@ -757,6 +758,7 @@ export default function Page() {
         waitlistPlayers: enrichedPlayers.slice(MAX_PLAYERS),
         match,
         amount: (s as any).amount ?? null,
+        tournament_group: (s as any).tournament_group ?? null,
       };
     });
   }, [slots, slotPlayers, slotMatchMap]);
