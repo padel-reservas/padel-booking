@@ -61,6 +61,7 @@ type SlotWithPlayers = Slot & {
   activePlayers: SlotPlayerWithPaymentUI[];
   waitlistPlayers: SlotPlayerWithPaymentUI[];
   match: Match | null;
+  amount: number | null;
 };
 
 type SuggestionFilter =
@@ -755,6 +756,7 @@ export default function Page() {
         activePlayers: enrichedPlayers.slice(0, MAX_PLAYERS),
         waitlistPlayers: enrichedPlayers.slice(MAX_PLAYERS),
         match,
+        amount: (s as any).amount ?? null,
       };
     });
   }, [slots, slotPlayers, slotMatchMap]);
