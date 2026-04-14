@@ -432,6 +432,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'updateSlotTournament') {
+      const { slotId, tournament_group } = body;
+
+      if (!slotId) {
+        return NextResponse.json({ error: 'Falta slotId' }, { status: 400 });
+      }
+
+      const { error } = await supabase
+        .from('slots')
+        .update({ tournament_group: tournament_group || null })
+        .eq('id', slotId);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
     return NextResponse.json({ error: 'Acción inválida' }, { status: 400 });
   } catch (err: any) {
     return NextResponse.json(
