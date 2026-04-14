@@ -423,7 +423,7 @@ export async function POST(req: Request) {
       const { error } = await supabase
         .from('slots')
         .update({ amount })
-        .eq('id', slotId);
+        .eq('id', Number(slotId));
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 400 });
@@ -442,7 +442,7 @@ export async function POST(req: Request) {
       const { error } = await supabase
         .from('slots')
         .update({ tournament_group: tournament_group || null })
-        .eq('id', slotId);
+        .eq('id', Number(slotId));
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 400 });
