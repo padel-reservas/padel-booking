@@ -15,6 +15,7 @@ type SlotWithPlayers = {
   id: number;
   date: string;
   time: string;
+  amount: number | null;
   allPlayers: SlotPlayerWithPaymentUI[];
   activePlayers: SlotPlayerWithPaymentUI[];
   waitlistPlayers: SlotPlayerWithPaymentUI[];
@@ -283,6 +284,12 @@ export default function TurnosTab({
                       >
                         {slot.time}
                       </div>
+
+                      {slot.amount != null && (
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#166534', marginTop: 4 }}>
+                          💵 ${slot.amount} por jugador
+                        </div>
+                      )}
                     </div>
 
                     <div
@@ -368,17 +375,43 @@ export default function TurnosTab({
                       )}
 
                       {adminUnlocked && (
-                        <button
-                          onClick={() =>
-                            adminAction({
-                              action: 'deleteSlot',
-                              slotId: slot.id,
-                            }).then(() => loadData())
-                          }
-                          style={secondaryButtonStyle}
-                        >
-                          Borrar turno
-                        </button>
+                        <>
+                          <button
+                            onClick={async () => {
+                              const input = window.prompt(
+                                'Monto por jugador (ej: 25):',
+                                slot.amount?.toString() || ''
+                              );
+                              if (input === null) return;
+                              const parsed = parseFloat(input.replace(',', '.'));
+                              if (isNaN(parsed) || parsed < 0) {
+                                window.alert('Monto inválido.');
+                                return;
+                              }
+                              await adminAction({
+                                action: 'updateSlotAmount',
+                                slotId: slot.id,
+                                amount: parsed,
+                              });
+                              await loadData();
+                            }}
+                            style={secondaryButtonStyle}
+                          >
+                            {slot.amount != null ? `💵 $${slot.amount}` : 'Agregar monto'}
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              adminAction({
+                                action: 'deleteSlot',
+                                slotId: slot.id,
+                              }).then(() => loadData())
+                            }
+                            style={secondaryButtonStyle}
+                          >
+                            Borrar turno
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -766,7 +799,7 @@ export default function TurnosTab({
                                         }
                                         style={{
                                           ...primaryButtonStyle,
-                                          background: '#166534',
+                                          background: '#166634',
                                         }}
                                       >
                                         Mark Paid
