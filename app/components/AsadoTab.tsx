@@ -57,8 +57,6 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
   }, [loadData]);
 
   async function handleToggleAttending(playerName: string, currentAttending: boolean) {
-    if (!adminUnlocked) return;
-
     setSaving(playerName);
 
     const existing = rsvps.find(
@@ -144,7 +142,6 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
     await loadData();
   }
 
-  // Combinar ranking players con rsvps
   const playersWithRsvp = rankingPlayers
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((p) => {
@@ -168,7 +165,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
   const totalPeople = totalAdults + totalKids;
 
   const isMe = (name: string) =>
-    myPlayerName && normalizeName(name) === normalizeName(myPlayerName);
+    !!myPlayerName && normalizeName(name) === normalizeName(myPlayerName);
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -206,7 +203,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
         </div>
       )}
 
-      {/* Lista de jugadores */}
+      {/* Confirmados */}
       <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
         <h3 style={{ marginTop: 0, marginBottom: 12 }}>
           Confirmados ({attending.length})
@@ -275,15 +272,17 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
                           >+</button>
                         </div>
                       </div>
-
-                      <button
-                        onClick={() => handleToggleAttending(p.name, true)}
-                        disabled={saving === p.name}
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}
-                      >
-                        No viene
-                      </button>
                     </div>
+                  )}
+
+                  {(adminUnlocked || isMe(p.name)) && (
+                    <button
+                      onClick={() => handleToggleAttending(p.name, true)}
+                      disabled={saving === p.name}
+                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}
+                    >
+                      No viene
+                    </button>
                   )}
                 </div>
               </div>
@@ -291,6 +290,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
           </div>
         )}
 
+        {/* Sin confirmar */}
         <h3 style={{ marginTop: 16, marginBottom: 12, color: '#6b7280' }}>
           Sin confirmar ({notAttending.length})
         </h3>
@@ -312,7 +312,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
                 )}
               </span>
 
-              {adminUnlocked && (
+              {(adminUnlocked || isMe(p.name)) && (
                 <button
                   onClick={() => handleToggleAttending(p.name, false)}
                   disabled={saving === p.name}
