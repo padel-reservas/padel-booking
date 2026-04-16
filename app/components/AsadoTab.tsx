@@ -91,8 +91,6 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
   }
 
   async function handleUpdateGuests(playerName: string, guests: number) {
-    if (!adminUnlocked) return;
-
     setSaving(playerName);
 
     const existing = rsvps.find(
@@ -117,8 +115,6 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
   }
 
   async function handleUpdateKids(playerName: string, kids: number) {
-    if (!adminUnlocked) return;
-
     setSaving(playerName);
 
     const existing = rsvps.find(
@@ -237,8 +233,8 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
                     {p.kids > 0 && <span> · 👦 <span style={{ fontWeight: 700 }}>{p.kids}</span> menor{p.kids !== 1 ? 'es' : ''}</span>}
                   </div>
 
-                  {adminUnlocked && (
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {(adminUnlocked || isMe(p.name)) && (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>Adultos extra</div>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -272,17 +268,15 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
                           >+</button>
                         </div>
                       </div>
-                    </div>
-                  )}
 
-                  {(adminUnlocked || isMe(p.name)) && (
-                    <button
-                      onClick={() => handleToggleAttending(p.name, true)}
-                      disabled={saving === p.name}
-                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}
-                    >
-                      No viene
-                    </button>
+                      <button
+                        onClick={() => handleToggleAttending(p.name, true)}
+                        disabled={saving === p.name}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}
+                      >
+                        No viene
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
