@@ -184,7 +184,8 @@ export type TabKey =
   | 'historial'
   | 'actividad'
   | 'torneo'
-  | 'apuestas';
+  | 'apuestas'
+  | 'asado';
 
 export type ResultFormMode = 'slot' | 'manual';
 
