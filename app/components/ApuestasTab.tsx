@@ -10,7 +10,7 @@ const supabase = createClient(
 );
 
 const TOURNAMENT_ID = 1;
-const SHOW_STATS = false; // cambiar a true para mostrar el gráfico a todos
+const SHOW_STATS = true; // cambiar a true para mostrar el gráfico a todos
 
 type TournamentPair = {
   id: number;
