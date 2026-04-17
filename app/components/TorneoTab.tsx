@@ -351,71 +351,152 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
   }
 
   async function handleSaveResult() {
-    if (!resultForm) return;
+  if (!resultForm) return;
 
-    const { matchId, set1p1, set1p2, set2p1, set2p2, set3p1, set3p2 } = resultForm;
+  const { matchId, set1p1, set1p2, set2p1, set2p2, set3p1, set3p2 } = resultForm;
 
-    const s1p1 = parseInt(set1p1);
-    const s1p2 = parseInt(set1p2);
-    const s2p1 = parseInt(set2p1);
-    const s2p2 = parseInt(set2p2);
+  const s1p1 = parseInt(set1p1);
+  const s1p2 = parseInt(set1p2);
+  const s2p1 = parseInt(set2p1);
+  const s2p2 = parseInt(set2p2);
 
-    if (isNaN(s1p1) || isNaN(s1p2) || isNaN(s2p1) || isNaN(s2p2)) {
-      alert('Cargá al menos los primeros 2 sets.');
-      return;
-    }
-
-    const match = tournamentMatches.find((m) => m.id === matchId);
-    if (!match) return;
-
-    let setsP1 = 0;
-    let setsP2 = 0;
-    if (s1p1 > s1p2) setsP1++; else setsP2++;
-    if (s2p1 > s2p2) setsP1++; else setsP2++;
-
-    let s3p1: number | null = null;
-    let s3p2: number | null = null;
-
-    if (setsP1 === 1 && setsP2 === 1) {
-      s3p1 = parseInt(set3p1);
-      s3p2 = parseInt(set3p2);
-      if (isNaN(s3p1) || isNaN(s3p2)) {
-        alert('Hay empate en sets, cargá el 3er set.');
-        return;
-      }
-      if (s3p1 > s3p2) setsP1++; else setsP2++;
-    }
-
-    const winnerPairId = setsP1 > setsP2 ? match.pair1_id : match.pair2_id;
-
-    setSaving(true);
-
-    const { error } = await supabase
-      .from('tournament_matches')
-      .update({
-        set1_pair1: s1p1,
-        set1_pair2: s1p2,
-        set2_pair1: s2p1,
-        set2_pair2: s2p2,
-        set3_pair1: s3p1,
-        set3_pair2: s3p2,
-        winner_pair_id: winnerPairId,
-        status: 'played',
-        played_at: new Date().toISOString(),
-      })
-      .eq('id', matchId);
-
-    setSaving(false);
-
-    if (error) {
-      alert(`No se pudo guardar el resultado: ${error.message}`);
-      return;
-    }
-
-    setResultForm(null);
-    await loadData();
+  if (isNaN(s1p1) || isNaN(s1p2) || isNaN(s2p1) || isNaN(s2p2)) {
+    alert('Cargá al menos los primeros 2 sets.');
+    return;
   }
 
+  const match = tournamentMatches.find((m) => m.id === matchId);
+  if (!match) return;
+
+  let setsP1 = 0;
+  let setsP2 = 0;
+  if (s1p1 > s1p2) setsP1++; else setsP2++;
+  if (s2p1 > s2p2) setsP1++; else setsP2++;
+
+  let s3p1: number | null = null;
+  let s3p2: number | null = null;
+
+  if (setsP1 === 1 && setsP2 === 1) {
+    s3p1 = parseInt(set3p1);
+    s3p2 = parseInt(set3p2);
+    if (isNaN(s3p1) || isNaN(s3p2)) {
+      alert('Hay empate en sets, cargá el 3er set.');
+      return;
+    }
+    if (s3p1 > s3p2) setsP1++; else setsP2++;
+  }
+
+  const winnerPairId = setsP1 > setsP2 ? match.pair1_id : match.pair2_id;
+
+  setSaving(true);
+
+  // 1. Guardar resultado en tournament_matches
+  const { error: tournamentError } = await supabase
+    .from('tournament_matches')
+    .update({
+      set1_pair1: s1p1, set1_pair2: s1p2,
+      set2_pair1: s2p1, set2_pair2: s2p2,
+      set3_pair1: s3p1, set3_pair2: s3p2,
+      winner_pair_id: winnerPairId,
+      status: 'played',
+      played_at: new Date().toISOString(),
+    })
+    .eq('id', matchId);
+
+  if (tournamentError) {
+    alert(`No se pudo guardar el resultado: ${tournamentError.message}`);
+    setSaving(false);
+    return;
+  }
+
+  // 2. Buscar nombres de los jugadores de cada pareja
+  const pair1 = tournamentPairs.find(p => p.id === match.pair1_id);
+  const pair2 = tournamentPairs.find(p => p.id === match.pair2_id);
+
+  if (!pair1 || !pair2) {
+    alert('No se encontraron las parejas.');
+    setSaving(false);
+    return;
+  }
+
+  // 3. Buscar IDs en ranking_players por nombre
+  const { data: rankingData, error: rankingError } = await supabase
+    .from('ranking_players')
+    .select('id, name')
+    .in('name', [
+      pair1.player1_name, pair1.player2_name,
+      pair2.player1_name, pair2.player2_name,
+    ]);
+
+  if (rankingError || !rankingData) {
+    alert(`No se pudieron obtener los jugadores del ranking: ${rankingError?.message}`);
+    setSaving(false);
+    return;
+  }
+
+  const findId = (name: string) =>
+    rankingData.find(p => p.name.trim().toLowerCase() === name.trim().toLowerCase())?.id;
+
+  const a1Id = findId(pair1.player1_name);
+  const a2Id = findId(pair1.player2_name);
+  const b1Id = findId(pair2.player1_name);
+  const b2Id = findId(pair2.player2_name);
+
+  if (!a1Id || !a2Id || !b1Id || !b2Id) {
+    alert('No se encontraron todos los jugadores en el ranking. Verificá que los nombres coincidan.');
+    setSaving(false);
+    return;
+  }
+
+  // 4. Determinar ganador en términos de team A/B
+  const winnerTeam = winnerPairId === match.pair1_id ? 'A' : 'B';
+
+  // 5. Multiplicador según ronda
+  const multiplierMap: Record<string, number> = {
+    groups: 1.5,
+    quarters: 2.0,
+    semis: 2.5,
+    final: 3.0,
+    third_place: 3.0,
+  };
+  const tournamentMultiplier = multiplierMap[match.round] ?? 1.5;
+
+  // 6. Insertar en matches
+  const today = new Date().toISOString().slice(0, 10);
+  const { error: matchError } = await supabase.from('matches').insert({
+    match_date: today,
+    match_time: null,
+    slot_id: null,
+    team_a_player_1_id: a1Id,
+    team_a_player_2_id: a2Id,
+    team_b_player_1_id: b1Id,
+    team_b_player_2_id: b2Id,
+    set1_a: s1p1, set1_b: s1p2,
+    set2_a: s2p1, set2_b: s2p2,
+    set3_a: s3p1, set3_b: s3p2,
+    winner_team: winnerTeam,
+    source: 'torneo',
+    tournament_multiplier: tournamentMultiplier,
+    notes: `Torneo ${match.round} — Grupo ${match.group_name || ''}`.trim(),
+  });
+
+  if (matchError) {
+    alert(`Se guardó el resultado del torneo pero no se pudo actualizar el ranking: ${matchError.message}`);
+    setSaving(false);
+    return;
+  }
+
+  // 7. Recalcular rankings
+  const { error: recalcError } = await supabase.rpc('recalculate_rankings_v2');
+
+  if (recalcError) {
+    alert(`Resultado guardado pero error al recalcular rankings: ${recalcError.message}`);
+  }
+
+  setSaving(false);
+  setResultForm(null);
+  await loadData();
+}
   async function handleConfirm() {
     if (!myPlayerName) { alert('Primero elegí tu jugador en la tab Ranking.'); return; }
     if (!isEligible) return;
