@@ -457,7 +457,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     quarters: 2.0,
     semis: 2.5,
     final: 3.0,
-    third_place: 3.0,
+    third_place: 2.5,
   };
   const tournamentMultiplier = multiplierMap[match.round] ?? 1.5;
 
