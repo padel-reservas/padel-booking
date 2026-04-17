@@ -10,6 +10,7 @@ const supabase = createClient(
 );
 
 const TOURNAMENT_ID = 1;
+const SHOW_STATS = false; // cambiar a true para mostrar el gráfico a todos
 
 type TournamentPair = {
   id: number;
@@ -76,6 +77,19 @@ export default function ApuestasTab({ myPlayerName, adminUnlocked }: Props) {
     loadData();
   }, [loadData]);
 
+  // Calcular score ponderado por pareja
+  const pairScores = pairs.map((pair) => {
+    const firstVotes = predictions.filter(p => p.first_place_pair_id === pair.id).length;
+    const secondVotes = predictions.filter(p => p.second_place_pair_id === pair.id).length;
+    const thirdVotes = predictions.filter(p => p.third_place_pair_id === pair.id).length;
+    const score = firstVotes * 3 + secondVotes * 2 + thirdVotes * 1;
+    return {
+      id: pair.id,
+      name: `${pair.player1_name} / ${pair.player2_name}`,
+      score,
+    };
+  }).filter(p => p.score > 0).sort((a, b) => b.score - a.score).slice(0, 5);
+
   function getPairName(pairId: number) {
     const pair = pairs.find((p) => p.id === pairId);
     if (!pair) return '?';
@@ -89,16 +103,8 @@ export default function ApuestasTab({ myPlayerName, adminUnlocked }: Props) {
   async function handleSavePrediction() {
     const name = (myPlayerName.trim() || predictionName.trim());
 
-    if (!name) {
-      alert('Escribí tu nombre para apostar.');
-      return;
-    }
-
-    if (!predictionFirst || !predictionSecond || !predictionThird) {
-      alert('Elegí las 3 parejas.');
-      return;
-    }
-
+    if (!name) { alert('Escribí tu nombre para apostar.'); return; }
+    if (!predictionFirst || !predictionSecond || !predictionThird) { alert('Elegí las 3 parejas.'); return; }
     if (predictionFirst === predictionSecond || predictionFirst === predictionThird || predictionSecond === predictionThird) {
       alert('No podés elegir la misma pareja dos veces.');
       return;
@@ -119,10 +125,7 @@ export default function ApuestasTab({ myPlayerName, adminUnlocked }: Props) {
 
     setSavingPrediction(false);
 
-    if (error) {
-      alert(`No se pudo guardar la predicción: ${error.message}`);
-      return;
-    }
+    if (error) { alert(`No se pudo guardar la predicción: ${error.message}`); return; }
 
     setPredictionName('');
     setPredictionFirst('');
@@ -136,38 +139,25 @@ export default function ApuestasTab({ myPlayerName, adminUnlocked }: Props) {
 
     const { error } = await supabase
       .from('tournament_predictions')
-      .update({
-        paid,
-        paid_at: paid ? new Date().toISOString() : null,
-      })
+      .update({ paid, paid_at: paid ? new Date().toISOString() : null })
       .eq('id', predictionId);
 
-    if (error) {
-      alert(`No se pudo actualizar el pago: ${error.message}`);
-      return;
-    }
-
+    if (error) { alert(`No se pudo actualizar el pago: ${error.message}`); return; }
     await loadData();
   }
 
   async function handleDeletePrediction(predictionId: number) {
     if (!adminUnlocked) return;
-
     const ok = window.confirm('¿Seguro que querés borrar esta predicción?');
     if (!ok) return;
 
-    const { error } = await supabase
-      .from('tournament_predictions')
-      .delete()
-      .eq('id', predictionId);
-
-    if (error) {
-      alert(`No se pudo borrar la predicción: ${error.message}`);
-      return;
-    }
-
+    const { error } = await supabase.from('tournament_predictions').delete().eq('id', predictionId);
+    if (error) { alert(`No se pudo borrar la predicción: ${error.message}`); return; }
     await loadData();
   }
+
+  const showGraph = SHOW_STATS || adminUnlocked;
+  const maxScore = pairScores[0]?.score || 1;
 
   if (loading) {
     return (
@@ -196,6 +186,41 @@ export default function ApuestasTab({ myPlayerName, adminUnlocked }: Props) {
           Elegí tu pareja campeona, finalista y 3er puesto. Puntos: 3 por el campeón, 2 por el finalista, 1 por el 3ro.
         </p>
       </div>
+
+      {/* Gráfico — solo admin o cuando SHOW_STATS = true */}
+      {showGraph && pairScores.length > 0 && (
+        <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 4 }}>Favoritas del grupo</h3>
+          <p style={{ fontSize: 12, color: '#6b7280', marginTop: 0, marginBottom: 16 }}>
+            Campeón ×3 · Finalista ×2 · 3er puesto ×1
+          </p>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {pairScores.map((p, idx) => {
+              const barColors = ['#3266ad', '#1d9e75', '#ba7517', '#888780', '#888780'];
+              const pct = Math.round((p.score / maxScore) * 100);
+              return (
+                <div key={p.id}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
+                    <span style={{ fontWeight: idx === 0 ? 700 : 400, color: '#111827' }}>
+                      {idx === 0 ? '⭐ ' : ''}{p.name}
+                    </span>
+                    <span style={{ fontWeight: 700, color: barColors[idx] }}>{p.score} pts</span>
+                  </div>
+                  <div style={{ background: '#f1f5f9', borderRadius: 999, height: 10, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${pct}%`,
+                      background: barColors[idx],
+                      borderRadius: 999,
+                      transition: 'width 0.3s ease',
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Mi predicción actual */}
       {myPrediction && (
@@ -269,71 +294,7 @@ export default function ApuestasTab({ myPlayerName, adminUnlocked }: Props) {
         </div>
       )}
 
-      {/* Lista de predicciones — solo admin */}
-      {adminUnlocked && (
-        <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '2px solid #111827' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 12 }}>
-            Admin — Predicciones ({predictions.length}) — Pagaron: {predictions.filter(p => p.paid).length}
-          </h3>
-
-          {predictions.length === 0 ? (
-            <div style={{ color: '#64748b', fontSize: 13 }}>Todavía no hay predicciones.</div>
-          ) : (
-            <div style={{ display: 'grid', gap: 8 }}>
-              {predictions.map((pred, idx) => (
-                <div key={pred.id} style={{
-                  padding: '12px 14px', borderRadius: 12,
-                  background: pred.paid ? '#f0fdf4' : '#f8fafc',
-                  border: pred.paid ? '1px solid #86efac' : '1px solid #e5e7eb',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                    <div style={{ fontWeight: 800, fontSize: 14 }}>
-                      {idx + 1}. {pred.predictor_name}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      {pred.points != null && (
-                        <span style={{ fontSize: 12, fontWeight: 800, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 8px' }}>
-                          {pred.points} pts
-                        </span>
-                      )}
-                      <span style={{
-                        fontSize: 11, fontWeight: 700,
-                        color: pred.paid ? '#166534' : '#92400e',
-                        background: pred.paid ? '#dcfce7' : '#fef3c7',
-                        border: `1px solid ${pred.paid ? '#86efac' : '#fde68a'}`,
-                        borderRadius: 999, padding: '2px 8px'
-                      }}>
-                        {pred.paid ? '✅ Pagó' : '⏳ Pendiente'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gap: 4, fontSize: 13, marginBottom: 10 }}>
-                    <div>🥇 {getPairName(pred.first_place_pair_id)}</div>
-                    <div>🥈 {getPairName(pred.second_place_pair_id)}</div>
-                    <div>🥉 {getPairName(pred.third_place_pair_id)}</div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      onClick={() => handleMarkPaid(pred.id, !pred.paid)}
-                      style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
-                      {pred.paid ? 'Marcar no pagó' : 'Marcar pagó'}
-                    </button>
-                    <button
-                      onClick={() => handleDeletePrediction(pred.id)}
-                      style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
-                      Borrar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Lista pública — todos ven cuántos apostaron pero no qué apostaron */}
+      {/* Lista pública */}
       {!adminUnlocked && predictions.length > 0 && (
         <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
           <h3 style={{ marginTop: 0, marginBottom: 12 }}>
@@ -367,6 +328,66 @@ export default function ApuestasTab({ myPlayerName, adminUnlocked }: Props) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Panel admin */}
+      {adminUnlocked && (
+        <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '2px solid #111827' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 12 }}>
+            Admin — Predicciones ({predictions.length}) — Pagaron: {predictions.filter(p => p.paid).length}
+          </h3>
+
+          {predictions.length === 0 ? (
+            <div style={{ color: '#64748b', fontSize: 13 }}>Todavía no hay predicciones.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {predictions.map((pred, idx) => (
+                <div key={pred.id} style={{
+                  padding: '12px 14px', borderRadius: 12,
+                  background: pred.paid ? '#f0fdf4' : '#f8fafc',
+                  border: pred.paid ? '1px solid #86efac' : '1px solid #e5e7eb',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14 }}>{idx + 1}. {pred.predictor_name}</div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {pred.points != null && (
+                        <span style={{ fontSize: 12, fontWeight: 800, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 8px' }}>
+                          {pred.points} pts
+                        </span>
+                      )}
+                      <span style={{
+                        fontSize: 11, fontWeight: 700,
+                        color: pred.paid ? '#166534' : '#92400e',
+                        background: pred.paid ? '#dcfce7' : '#fef3c7',
+                        border: `1px solid ${pred.paid ? '#86efac' : '#fde68a'}`,
+                        borderRadius: 999, padding: '2px 8px'
+                      }}>
+                        {pred.paid ? '✅ Pagó' : '⏳ Pendiente'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 4, fontSize: 13, marginBottom: 10 }}>
+                    <div>🥇 {getPairName(pred.first_place_pair_id)}</div>
+                    <div>🥈 {getPairName(pred.second_place_pair_id)}</div>
+                    <div>🥉 {getPairName(pred.third_place_pair_id)}</div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => handleMarkPaid(pred.id, !pred.paid)}
+                      style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                      {pred.paid ? 'Marcar no pagó' : 'Marcar pagó'}
+                    </button>
+                    <button onClick={() => handleDeletePrediction(pred.id)}
+                      style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                      Borrar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
