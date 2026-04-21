@@ -13,6 +13,7 @@ type AsadoRsvp = {
   id: number;
   player_name: string;
   attending: boolean;
+  declined: boolean;
   guests: number;
   kids: number;
   created_at: string;
@@ -56,7 +57,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
     loadData();
   }, [loadData]);
 
-  async function handleToggleAttending(playerName: string, currentAttending: boolean) {
+  async function handleConfirm(playerName: string) {
     setSaving(playerName);
 
     const existing = rsvps.find(
@@ -66,24 +67,62 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
     if (existing) {
       const { error } = await supabase
         .from('asado_rsvp')
-        .update({ attending: !currentAttending })
+        .update({ attending: true, declined: false })
         .eq('id', existing.id);
 
-      if (error) {
-        alert(`Error: ${error.message}`);
-        setSaving(null);
-        return;
-      }
+      if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     } else {
       const { error } = await supabase
         .from('asado_rsvp')
-        .insert({ player_name: playerName.trim(), attending: true, guests: 0, kids: 0 });
+        .insert({ player_name: playerName.trim(), attending: true, declined: false, guests: 0, kids: 0 });
 
-      if (error) {
-        alert(`Error: ${error.message}`);
-        setSaving(null);
-        return;
-      }
+      if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
+    }
+
+    setSaving(null);
+    await loadData();
+  }
+
+  async function handleDecline(playerName: string) {
+    setSaving(playerName);
+
+    const existing = rsvps.find(
+      (r) => normalizeName(r.player_name) === normalizeName(playerName)
+    );
+
+    if (existing) {
+      const { error } = await supabase
+        .from('asado_rsvp')
+        .update({ attending: false, declined: true })
+        .eq('id', existing.id);
+
+      if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
+    } else {
+      const { error } = await supabase
+        .from('asado_rsvp')
+        .insert({ player_name: playerName.trim(), attending: false, declined: true, guests: 0, kids: 0 });
+
+      if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
+    }
+
+    setSaving(null);
+    await loadData();
+  }
+
+  async function handleWithdraw(playerName: string) {
+    setSaving(playerName);
+
+    const existing = rsvps.find(
+      (r) => normalizeName(r.player_name) === normalizeName(playerName)
+    );
+
+    if (existing) {
+      const { error } = await supabase
+        .from('asado_rsvp')
+        .update({ attending: false, declined: false })
+        .eq('id', existing.id);
+
+      if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     }
 
     setSaving(null);
@@ -103,11 +142,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
         .update({ guests: Math.max(0, guests) })
         .eq('id', existing.id);
 
-      if (error) {
-        alert(`Error: ${error.message}`);
-        setSaving(null);
-        return;
-      }
+      if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     }
 
     setSaving(null);
@@ -127,11 +162,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
         .update({ kids: Math.max(0, kids) })
         .eq('id', existing.id);
 
-      if (error) {
-        alert(`Error: ${error.message}`);
-        setSaving(null);
-        return;
-      }
+      if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     }
 
     setSaving(null);
@@ -147,6 +178,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
       return {
         name: p.name,
         attending: rsvp?.attending ?? false,
+        declined: rsvp?.declined ?? false,
         guests: rsvp?.guests ?? 0,
         kids: rsvp?.kids ?? 0,
         rsvpId: rsvp?.id ?? null,
@@ -154,7 +186,8 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
     });
 
   const attending = playersWithRsvp.filter((p) => p.attending);
-  const notAttending = playersWithRsvp.filter((p) => !p.attending);
+  const declined = playersWithRsvp.filter((p) => p.declined);
+  const pending = playersWithRsvp.filter((p) => !p.attending && !p.declined);
 
   const totalAdults = attending.reduce((sum, p) => sum + 1 + p.guests, 0);
   const totalKids = attending.reduce((sum, p) => sum + p.kids, 0);
@@ -175,10 +208,10 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
       </div>
 
       {/* Resumen */}
-      {attending.length > 0 && (
+      {(attending.length > 0 || declined.length > 0) && (
         <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
           <h3 style={{ marginTop: 0, marginBottom: 12 }}>Resumen</h3>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 12, padding: '10px 16px', textAlign: 'center' }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#166534' }}>{attending.length}</div>
               <div style={{ fontSize: 12, color: '#166534', fontWeight: 700 }}>Jugadores</div>
@@ -195,6 +228,10 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
               <div style={{ fontSize: 24, fontWeight: 800, color: 'white' }}>{totalPeople}</div>
               <div style={{ fontSize: 12, color: '#9ca3af', fontWeight: 700 }}>Total</div>
             </div>
+            <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 12, padding: '10px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#991b1b' }}>{declined.length}</div>
+              <div style={{ fontSize: 12, color: '#991b1b', fontWeight: 700 }}>No van</div>
+            </div>
           </div>
         </div>
       )}
@@ -208,9 +245,9 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
         {loading ? (
           <div style={{ color: '#64748b' }}>Cargando...</div>
         ) : attending.length === 0 ? (
-          <div style={{ color: '#64748b', marginBottom: 16 }}>Todavía nadie confirmó.</div>
+          <div style={{ color: '#64748b', marginBottom: 8 }}>Todavía nadie confirmó.</div>
         ) : (
-          <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gap: 8 }}>
             {attending.map((p) => (
               <div key={p.name} style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
@@ -238,42 +275,31 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>Adultos extra</div>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <button
-                            onClick={() => handleUpdateGuests(p.name, p.guests - 1)}
+                          <button onClick={() => handleUpdateGuests(p.name, p.guests - 1)}
                             disabled={p.guests === 0 || saving === p.name}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: p.guests === 0 ? 'default' : 'pointer', fontWeight: 700, opacity: p.guests === 0 ? 0.4 : 1 }}
-                          >-</button>
+                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: p.guests === 0 ? 'default' : 'pointer', fontWeight: 700, opacity: p.guests === 0 ? 0.4 : 1 }}>-</button>
                           <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 700 }}>{p.guests}</span>
-                          <button
-                            onClick={() => handleUpdateGuests(p.name, p.guests + 1)}
+                          <button onClick={() => handleUpdateGuests(p.name, p.guests + 1)}
                             disabled={saving === p.name}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700 }}
-                          >+</button>
+                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700 }}>+</button>
                         </div>
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>Menores</div>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <button
-                            onClick={() => handleUpdateKids(p.name, p.kids - 1)}
+                          <button onClick={() => handleUpdateKids(p.name, p.kids - 1)}
                             disabled={p.kids === 0 || saving === p.name}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: p.kids === 0 ? 'default' : 'pointer', fontWeight: 700, opacity: p.kids === 0 ? 0.4 : 1 }}
-                          >-</button>
+                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: p.kids === 0 ? 'default' : 'pointer', fontWeight: 700, opacity: p.kids === 0 ? 0.4 : 1 }}>-</button>
                           <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 700 }}>{p.kids}</span>
-                          <button
-                            onClick={() => handleUpdateKids(p.name, p.kids + 1)}
+                          <button onClick={() => handleUpdateKids(p.name, p.kids + 1)}
                             disabled={saving === p.name}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700 }}
-                          >+</button>
+                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700 }}>+</button>
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handleToggleAttending(p.name, true)}
-                        disabled={saving === p.name}
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}
-                      >
+                      <button onClick={() => handleWithdraw(p.name)} disabled={saving === p.name}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
                         No viene
                       </button>
                     </div>
@@ -283,37 +309,75 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
             ))}
           </div>
         )}
+      </div>
 
-        {/* Sin confirmar */}
-        <h3 style={{ marginTop: 16, marginBottom: 12, color: '#6b7280' }}>
-          Sin confirmar ({notAttending.length})
+      {/* No van */}
+      {declined.length > 0 && (
+        <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 12, color: '#991b1b' }}>
+            No van ({declined.length})
+          </h3>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {declined.map((p) => (
+              <div key={p.name} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                borderRadius: 12,
+                background: isMe(p.name) ? '#fef2f2' : '#f8fafc',
+                border: isMe(p.name) ? '1px solid #fca5a5' : '1px solid #e5e7eb',
+              }}>
+                <span style={{ fontWeight: isMe(p.name) ? 800 : 400, fontSize: 14, color: '#991b1b', flex: 1 }}>
+                  ❌ {p.name}
+                  {isMe(p.name) && (
+                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 999, padding: '2px 8px' }}>
+                      Vos
+                    </span>
+                  )}
+                </span>
+                {(adminUnlocked || isMe(p.name)) && (
+                  <button onClick={() => handleConfirm(p.name)} disabled={saving === p.name}
+                    style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: '#111827', color: 'white', cursor: saving === p.name ? 'default' : 'pointer', fontWeight: 700, fontSize: 12, opacity: saving === p.name ? 0.7 : 1 }}>
+                    Me anoto
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sin confirmar */}
+      <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+        <h3 style={{ marginTop: 0, marginBottom: 12, color: '#6b7280' }}>
+          Sin confirmar ({pending.length})
         </h3>
-
         <div style={{ display: 'grid', gap: 8 }}>
-          {notAttending.map((p) => (
+          {pending.map((p) => (
             <div key={p.name} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
               borderRadius: 12,
-              background: isMe(p.name) ? '#fef2f2' : '#f8fafc',
-              border: isMe(p.name) ? '1px solid #fca5a5' : '1px solid #e5e7eb',
+              background: isMe(p.name) ? '#fffbeb' : '#f8fafc',
+              border: isMe(p.name) ? '1px solid #fde68a' : '1px solid #e5e7eb',
             }}>
               <span style={{ fontWeight: isMe(p.name) ? 800 : 400, fontSize: 14, color: '#6b7280', flex: 1 }}>
                 {p.name}
                 {isMe(p.name) && (
-                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 999, padding: '2px 8px' }}>
+                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 999, padding: '2px 8px' }}>
                     Vos
                   </span>
                 )}
               </span>
 
               {(adminUnlocked || isMe(p.name)) && (
-                <button
-                  onClick={() => handleToggleAttending(p.name, false)}
-                  disabled={saving === p.name}
-                  style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: '#111827', color: 'white', cursor: saving === p.name ? 'default' : 'pointer', fontWeight: 700, fontSize: 12, opacity: saving === p.name ? 0.7 : 1 }}
-                >
-                  {saving === p.name ? '...' : 'Confirmar'}
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => handleConfirm(p.name)} disabled={saving === p.name}
+                    style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: '#111827', color: 'white', cursor: saving === p.name ? 'default' : 'pointer', fontWeight: 700, fontSize: 12, opacity: saving === p.name ? 0.7 : 1 }}>
+                    {saving === p.name ? '...' : 'Voy'}
+                  </button>
+                  <button onClick={() => handleDecline(p.name)} disabled={saving === p.name}
+                    style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: saving === p.name ? 'default' : 'pointer', fontWeight: 700, fontSize: 12, opacity: saving === p.name ? 0.7 : 1 }}>
+                    No voy
+                  </button>
+                </div>
               )}
             </div>
           ))}
