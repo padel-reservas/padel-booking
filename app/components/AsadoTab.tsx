@@ -35,9 +35,14 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
 
+  // Formulario para externos
+  const [externalName, setExternalName] = useState('');
+  const [externalGuests, setExternalGuests] = useState(0);
+  const [externalKids, setExternalKids] = useState(0);
+  const [savingExternal, setSavingExternal] = useState(false);
+
   const loadData = useCallback(async () => {
     setLoading(true);
-
     const { data, error } = await supabase
       .from('asado_rsvp')
       .select('*')
@@ -57,25 +62,17 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
     loadData();
   }, [loadData]);
 
+  const rankingNames = new Set(rankingPlayers.map(p => normalizeName(p.name)));
+
   async function handleConfirm(playerName: string) {
     setSaving(playerName);
-
-    const existing = rsvps.find(
-      (r) => normalizeName(r.player_name) === normalizeName(playerName)
-    );
+    const existing = rsvps.find((r) => normalizeName(r.player_name) === normalizeName(playerName));
 
     if (existing) {
-      const { error } = await supabase
-        .from('asado_rsvp')
-        .update({ attending: true, declined: false })
-        .eq('id', existing.id);
-
+      const { error } = await supabase.from('asado_rsvp').update({ attending: true, declined: false }).eq('id', existing.id);
       if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     } else {
-      const { error } = await supabase
-        .from('asado_rsvp')
-        .insert({ player_name: playerName.trim(), attending: true, declined: false, guests: 0, kids: 0 });
-
+      const { error } = await supabase.from('asado_rsvp').insert({ player_name: playerName.trim(), attending: true, declined: false, guests: 0, kids: 0 });
       if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     }
 
@@ -85,23 +82,13 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
 
   async function handleDecline(playerName: string) {
     setSaving(playerName);
-
-    const existing = rsvps.find(
-      (r) => normalizeName(r.player_name) === normalizeName(playerName)
-    );
+    const existing = rsvps.find((r) => normalizeName(r.player_name) === normalizeName(playerName));
 
     if (existing) {
-      const { error } = await supabase
-        .from('asado_rsvp')
-        .update({ attending: false, declined: true })
-        .eq('id', existing.id);
-
+      const { error } = await supabase.from('asado_rsvp').update({ attending: false, declined: true }).eq('id', existing.id);
       if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     } else {
-      const { error } = await supabase
-        .from('asado_rsvp')
-        .insert({ player_name: playerName.trim(), attending: false, declined: true, guests: 0, kids: 0 });
-
+      const { error } = await supabase.from('asado_rsvp').insert({ player_name: playerName.trim(), attending: false, declined: true, guests: 0, kids: 0 });
       if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     }
 
@@ -111,17 +98,10 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
 
   async function handleWithdraw(playerName: string) {
     setSaving(playerName);
-
-    const existing = rsvps.find(
-      (r) => normalizeName(r.player_name) === normalizeName(playerName)
-    );
+    const existing = rsvps.find((r) => normalizeName(r.player_name) === normalizeName(playerName));
 
     if (existing) {
-      const { error } = await supabase
-        .from('asado_rsvp')
-        .update({ attending: false, declined: false })
-        .eq('id', existing.id);
-
+      const { error } = await supabase.from('asado_rsvp').update({ attending: false, declined: false }).eq('id', existing.id);
       if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     }
 
@@ -131,17 +111,10 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
 
   async function handleUpdateGuests(playerName: string, guests: number) {
     setSaving(playerName);
-
-    const existing = rsvps.find(
-      (r) => normalizeName(r.player_name) === normalizeName(playerName)
-    );
+    const existing = rsvps.find((r) => normalizeName(r.player_name) === normalizeName(playerName));
 
     if (existing) {
-      const { error } = await supabase
-        .from('asado_rsvp')
-        .update({ guests: Math.max(0, guests) })
-        .eq('id', existing.id);
-
+      const { error } = await supabase.from('asado_rsvp').update({ guests: Math.max(0, guests) }).eq('id', existing.id);
       if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     }
 
@@ -151,17 +124,10 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
 
   async function handleUpdateKids(playerName: string, kids: number) {
     setSaving(playerName);
-
-    const existing = rsvps.find(
-      (r) => normalizeName(r.player_name) === normalizeName(playerName)
-    );
+    const existing = rsvps.find((r) => normalizeName(r.player_name) === normalizeName(playerName));
 
     if (existing) {
-      const { error } = await supabase
-        .from('asado_rsvp')
-        .update({ kids: Math.max(0, kids) })
-        .eq('id', existing.id);
-
+      const { error } = await supabase.from('asado_rsvp').update({ kids: Math.max(0, kids) }).eq('id', existing.id);
       if (error) { alert(`Error: ${error.message}`); setSaving(null); return; }
     }
 
@@ -169,12 +135,52 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
     await loadData();
   }
 
-  const playersWithRsvp = rankingPlayers
+  async function handleAddExternal() {
+    const name = externalName.trim();
+    if (!name) { alert('Escribí un nombre.'); return; }
+
+    const alreadyExists = rsvps.some((r) => normalizeName(r.player_name) === normalizeName(name));
+    if (alreadyExists) { alert('Ese nombre ya está en la lista.'); return; }
+
+    setSavingExternal(true);
+
+    const { error } = await supabase.from('asado_rsvp').insert({
+      player_name: name,
+      attending: true,
+      declined: false,
+      guests: externalGuests,
+      kids: externalKids,
+    });
+
+    setSavingExternal(false);
+
+    if (error) { alert(`Error: ${error.message}`); return; }
+
+    setExternalName('');
+    setExternalGuests(0);
+    setExternalKids(0);
+    await loadData();
+  }
+
+  async function handleDeleteExternal(playerName: string) {
+    if (!adminUnlocked) return;
+    const ok = window.confirm(`¿Borrar a ${playerName} de la lista?`);
+    if (!ok) return;
+
+    const existing = rsvps.find((r) => normalizeName(r.player_name) === normalizeName(playerName));
+    if (!existing) return;
+
+    const { error } = await supabase.from('asado_rsvp').delete().eq('id', existing.id);
+    if (error) { alert(`Error: ${error.message}`); return; }
+
+    await loadData();
+  }
+
+  // Jugadores del ranking con su estado
+  const rankingPlayersWithRsvp = rankingPlayers
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((p) => {
-      const rsvp = rsvps.find(
-        (r) => normalizeName(r.player_name) === normalizeName(p.name)
-      );
+      const rsvp = rsvps.find((r) => normalizeName(r.player_name) === normalizeName(p.name));
       return {
         name: p.name,
         attending: rsvp?.attending ?? false,
@@ -182,12 +188,29 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
         guests: rsvp?.guests ?? 0,
         kids: rsvp?.kids ?? 0,
         rsvpId: rsvp?.id ?? null,
+        isExternal: false,
       };
     });
 
-  const attending = playersWithRsvp.filter((p) => p.attending);
-  const declined = playersWithRsvp.filter((p) => p.declined);
-  const pending = playersWithRsvp.filter((p) => !p.attending && !p.declined);
+  // Externos (están en rsvps pero no en ranking)
+  const externalRsvps = rsvps
+    .filter((r) => !rankingNames.has(normalizeName(r.player_name)) && r.attending)
+    .map((r) => ({
+      name: r.player_name,
+      attending: r.attending,
+      declined: r.declined,
+      guests: r.guests,
+      kids: r.kids,
+      rsvpId: r.id,
+      isExternal: true,
+    }));
+
+  const attending = [
+    ...rankingPlayersWithRsvp.filter((p) => p.attending),
+    ...externalRsvps,
+  ];
+  const declined = rankingPlayersWithRsvp.filter((p) => p.declined);
+  const pending = rankingPlayersWithRsvp.filter((p) => !p.attending && !p.declined);
 
   const totalAdults = attending.reduce((sum, p) => sum + 1 + p.guests, 0);
   const totalKids = attending.reduce((sum, p) => sum + p.kids, 0);
@@ -195,6 +218,13 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
 
   const isMe = (name: string) =>
     !!myPlayerName && normalizeName(name) === normalizeName(myPlayerName);
+
+  const counterButton = (onClick: () => void, label: string, disabled: boolean) => (
+    <button onClick={onClick} disabled={disabled}
+      style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: disabled ? 'default' : 'pointer', fontWeight: 700, opacity: disabled ? 0.4 : 1 }}>
+      {label}
+    </button>
+  );
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -214,7 +244,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 12, padding: '10px 16px', textAlign: 'center' }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#166534' }}>{attending.length}</div>
-              <div style={{ fontSize: 12, color: '#166534', fontWeight: 700 }}>Jugadores</div>
+              <div style={{ fontSize: 12, color: '#166534', fontWeight: 700 }}>Confirmados</div>
             </div>
             <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '10px 16px', textAlign: 'center' }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#1e40af' }}>{totalAdults}</div>
@@ -236,31 +266,69 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
         </div>
       )}
 
+      {/* Agregar externo */}
+      <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+        <h3 style={{ marginTop: 0, marginBottom: 12 }}>Agregar invitado</h3>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <input
+            type="text"
+            value={externalName}
+            onChange={(e) => setExternalName(e.target.value)}
+            placeholder="Nombre del invitado"
+            style={{ width: '100%', padding: '10px 12px', borderRadius: 12, border: '1px solid #d1d5db', fontSize: 14 }}
+          />
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 700 }}>Adultos extra (14+)</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {counterButton(() => setExternalGuests(Math.max(0, externalGuests - 1)), '-', externalGuests === 0)}
+                <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 700 }}>{externalGuests}</span>
+                {counterButton(() => setExternalGuests(externalGuests + 1), '+', false)}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 700 }}>Menores de 14</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {counterButton(() => setExternalKids(Math.max(0, externalKids - 1)), '-', externalKids === 0)}
+                <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 700 }}>{externalKids}</span>
+                {counterButton(() => setExternalKids(externalKids + 1), '+', false)}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleAddExternal}
+            disabled={savingExternal || !externalName.trim()}
+            style={{ padding: '10px 16px', borderRadius: 12, border: 'none', background: '#111827', color: 'white', cursor: savingExternal || !externalName.trim() ? 'default' : 'pointer', fontWeight: 700, opacity: savingExternal || !externalName.trim() ? 0.5 : 1 }}
+          >
+            {savingExternal ? 'Agregando...' : 'Agregar'}
+          </button>
+        </div>
+      </div>
+
       {/* Confirmados */}
       <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-        <h3 style={{ marginTop: 0, marginBottom: 12 }}>
-          Confirmados ({attending.length})
-        </h3>
+        <h3 style={{ marginTop: 0, marginBottom: 12 }}>Confirmados ({attending.length})</h3>
 
         {loading ? (
           <div style={{ color: '#64748b' }}>Cargando...</div>
         ) : attending.length === 0 ? (
-          <div style={{ color: '#64748b', marginBottom: 8 }}>Todavía nadie confirmó.</div>
+          <div style={{ color: '#64748b' }}>Todavía nadie confirmó.</div>
         ) : (
           <div style={{ display: 'grid', gap: 8 }}>
             {attending.map((p) => (
               <div key={p.name} style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
                 borderRadius: 12, flexWrap: 'wrap',
-                background: isMe(p.name) ? '#f0fdf4' : '#f8fafc',
-                border: isMe(p.name) ? '1px solid #86efac' : '1px solid #e5e7eb',
+                background: isMe(p.name) ? '#f0fdf4' : p.isExternal ? '#f0f9ff' : '#f8fafc',
+                border: isMe(p.name) ? '1px solid #86efac' : p.isExternal ? '1px solid #bae6fd' : '1px solid #e5e7eb',
               }}>
                 <span style={{ fontWeight: isMe(p.name) ? 800 : 600, fontSize: 14, flex: 1 }}>
                   ✅ {p.name}
                   {isMe(p.name) && (
-                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 8px' }}>
-                      Vos
-                    </span>
+                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 8px' }}>Vos</span>
+                  )}
+                  {p.isExternal && (
+                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', border: '1px solid #bae6fd', borderRadius: 999, padding: '2px 8px' }}>Invitado</span>
                   )}
                 </span>
 
@@ -275,33 +343,33 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>Adultos extra</div>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <button onClick={() => handleUpdateGuests(p.name, p.guests - 1)}
-                            disabled={p.guests === 0 || saving === p.name}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: p.guests === 0 ? 'default' : 'pointer', fontWeight: 700, opacity: p.guests === 0 ? 0.4 : 1 }}>-</button>
+                          {counterButton(() => handleUpdateGuests(p.name, p.guests - 1), '-', p.guests === 0 || saving === p.name)}
                           <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 700 }}>{p.guests}</span>
-                          <button onClick={() => handleUpdateGuests(p.name, p.guests + 1)}
-                            disabled={saving === p.name}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700 }}>+</button>
+                          {counterButton(() => handleUpdateGuests(p.name, p.guests + 1), '+', saving === p.name)}
                         </div>
                       </div>
-
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>Menores</div>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <button onClick={() => handleUpdateKids(p.name, p.kids - 1)}
-                            disabled={p.kids === 0 || saving === p.name}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: p.kids === 0 ? 'default' : 'pointer', fontWeight: 700, opacity: p.kids === 0 ? 0.4 : 1 }}>-</button>
+                          {counterButton(() => handleUpdateKids(p.name, p.kids - 1), '-', p.kids === 0 || saving === p.name)}
                           <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 700 }}>{p.kids}</span>
-                          <button onClick={() => handleUpdateKids(p.name, p.kids + 1)}
-                            disabled={saving === p.name}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700 }}>+</button>
+                          {counterButton(() => handleUpdateKids(p.name, p.kids + 1), '+', saving === p.name)}
                         </div>
                       </div>
 
-                      <button onClick={() => handleWithdraw(p.name)} disabled={saving === p.name}
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
-                        No viene
-                      </button>
+                      {p.isExternal ? (
+                        adminUnlocked && (
+                          <button onClick={() => handleDeleteExternal(p.name)}
+                            style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                            Borrar
+                          </button>
+                        )
+                      ) : (
+                        <button onClick={() => handleWithdraw(p.name)} disabled={saving === p.name}
+                          style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#991b1b', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                          No viene
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -314,9 +382,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
       {/* No van */}
       {declined.length > 0 && (
         <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 12, color: '#991b1b' }}>
-            No van ({declined.length})
-          </h3>
+          <h3 style={{ marginTop: 0, marginBottom: 12, color: '#991b1b' }}>No van ({declined.length})</h3>
           <div style={{ display: 'grid', gap: 8 }}>
             {declined.map((p) => (
               <div key={p.name} style={{
@@ -328,14 +394,12 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
                 <span style={{ fontWeight: isMe(p.name) ? 800 : 400, fontSize: 14, color: '#991b1b', flex: 1 }}>
                   ❌ {p.name}
                   {isMe(p.name) && (
-                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 999, padding: '2px 8px' }}>
-                      Vos
-                    </span>
+                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 999, padding: '2px 8px' }}>Vos</span>
                   )}
                 </span>
                 {(adminUnlocked || isMe(p.name)) && (
                   <button onClick={() => handleConfirm(p.name)} disabled={saving === p.name}
-                    style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: '#111827', color: 'white', cursor: saving === p.name ? 'default' : 'pointer', fontWeight: 700, fontSize: 12, opacity: saving === p.name ? 0.7 : 1 }}>
+                    style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: '#111827', color: 'white', cursor: saving === p.name ? 'default' : 'pointer', fontWeight: 700, fontSize: 12 }}>
                     Me anoto
                   </button>
                 )}
@@ -345,10 +409,10 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
         </div>
       )}
 
-      {/* Sin confirmar */}
+      {/* Sin confirmar — solo ranking */}
       <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
         <h3 style={{ marginTop: 0, marginBottom: 12, color: '#6b7280' }}>
-          Sin confirmar ({pending.length})
+          Sin confirmar del grupo ({pending.length})
         </h3>
         <div style={{ display: 'grid', gap: 8 }}>
           {pending.map((p) => (
@@ -361,9 +425,7 @@ export default function AsadoTab({ rankingPlayers, myPlayerName, adminUnlocked }
               <span style={{ fontWeight: isMe(p.name) ? 800 : 400, fontSize: 14, color: '#6b7280', flex: 1 }}>
                 {p.name}
                 {isMe(p.name) && (
-                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 999, padding: '2px 8px' }}>
-                    Vos
-                  </span>
+                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 999, padding: '2px 8px' }}>Vos</span>
                 )}
               </span>
 
