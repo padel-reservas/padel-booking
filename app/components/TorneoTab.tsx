@@ -117,6 +117,104 @@ function assignGroupsSerpenteo(pairs: { player1: string; player2: string; combin
   }));
 }
 
+// Calcula standings con desempate correcto
+function computeStandings(
+  standings: GroupStanding[],
+  matches: TournamentMatch[]
+): GroupStanding[] {
+  if (standings.length === 0) return [];
+
+  // Agrupa por puntos
+  const sorted = [...standings].sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    return 0;
+  });
+
+  // Función para obtener resultado head to head entre dos parejas
+  function getH2HWinner(pairIdA: number, pairIdB: number): number | null {
+    const match = matches.find(
+      (m) => m.status === 'played' && (
+        (m.pair1_id === pairIdA && m.pair2_id === pairIdB) ||
+        (m.pair1_id === pairIdB && m.pair2_id === pairIdA)
+      )
+    );
+    return match?.winner_pair_id ?? null;
+  }
+
+  // Función para calcular stats solo entre un subconjunto de parejas
+  function getStatsAmong(pairId: number, pairIds: number[]): { setDiff: number; gameDiff: number } {
+    let setsWon = 0, setsLost = 0, gamesWon = 0, gamesLost = 0;
+
+    matches.forEach((m) => {
+      if (m.status !== 'played') return;
+      const involved = pairIds.includes(m.pair1_id) && pairIds.includes(m.pair2_id);
+      if (!involved) return;
+
+      const isPair1 = m.pair1_id === pairId;
+      const isPair2 = m.pair2_id === pairId;
+      if (!isPair1 && !isPair2) return;
+
+      const myS1 = isPair1 ? (m.set1_pair1 ?? 0) : (m.set1_pair2 ?? 0);
+      const oppS1 = isPair1 ? (m.set1_pair2 ?? 0) : (m.set1_pair1 ?? 0);
+      const myS2 = isPair1 ? (m.set2_pair1 ?? 0) : (m.set2_pair2 ?? 0);
+      const oppS2 = isPair1 ? (m.set2_pair2 ?? 0) : (m.set2_pair1 ?? 0);
+      const myS3 = isPair1 ? (m.set3_pair1 ?? 0) : (m.set3_pair2 ?? 0);
+      const oppS3 = isPair1 ? (m.set3_pair2 ?? 0) : (m.set3_pair1 ?? 0);
+
+      if (myS1 > oppS1) setsWon++; else if (oppS1 > myS1) setsLost++;
+      if (myS2 > oppS2) setsWon++; else if (oppS2 > myS2) setsLost++;
+      if (m.set3_pair1 != null) {
+        if (myS3 > oppS3) setsWon++; else if (oppS3 > myS3) setsLost++;
+      }
+
+      gamesWon += myS1 + myS2 + myS3;
+      gamesLost += oppS1 + oppS2 + oppS3;
+    });
+
+    return { setDiff: setsWon - setsLost, gameDiff: gamesWon - gamesLost };
+  }
+
+  // Resolver empates dentro de cada grupo de puntos iguales
+  const result: GroupStanding[] = [];
+  let i = 0;
+
+  while (i < sorted.length) {
+    // Encontrar el rango de empatados
+    let j = i;
+    while (j < sorted.length && sorted[j].points === sorted[i].points) j++;
+    const tiedGroup = sorted.slice(i, j);
+
+    if (tiedGroup.length === 1) {
+      result.push(tiedGroup[0]);
+    } else if (tiedGroup.length === 2) {
+      // Head to head
+      const winner = getH2HWinner(tiedGroup[0].pair_id, tiedGroup[1].pair_id);
+      if (winner === tiedGroup[0].pair_id) {
+        result.push(tiedGroup[0], tiedGroup[1]);
+      } else if (winner === tiedGroup[1].pair_id) {
+        result.push(tiedGroup[1], tiedGroup[0]);
+      } else {
+        // Sin head to head todavía — usar set diff general
+        const bySetDiff = [...tiedGroup].sort((a, b) => b.set_diff - a.set_diff || b.game_diff - a.game_diff);
+        result.push(...bySetDiff);
+      }
+    } else {
+      // Triple empate o más — sets y games solo entre empatados
+      const tiedIds = tiedGroup.map((s) => s.pair_id);
+      const withStats = tiedGroup.map((s) => {
+        const stats = getStatsAmong(s.pair_id, tiedIds);
+        return { ...s, _setDiff: stats.setDiff, _gameDiff: stats.gameDiff };
+      });
+      const sorted2 = withStats.sort((a, b) => b._setDiff - a._setDiff || b._gameDiff - a._gameDiff);
+      result.push(...sorted2);
+    }
+
+    i = j;
+  }
+
+  return result;
+}
+
 const groupColors: Record<string, { bg: string; border: string; text: string }> = {
   A: { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af' },
   B: { bg: '#f0fdf4', border: '#86efac', text: '#166534' },
@@ -215,10 +313,11 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     return acc;
   }, {} as Record<string, TournamentMatch[]>);
 
+  // Usar computeStandings en vez del rank de Supabase
   const standingsByGroup = ['A', 'B', 'C', 'D'].reduce((acc, group) => {
-    acc[group] = groupStandings
-      .filter((s) => s.group_name === group)
-      .sort((a, b) => a.group_rank - b.group_rank);
+    const raw = groupStandings.filter((s) => s.group_name === group);
+    const groupMatches = matchesByGroup[group] || [];
+    acc[group] = computeStandings(raw, groupMatches);
     return acc;
   }, {} as Record<string, GroupStanding[]>);
 
@@ -271,7 +370,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     }));
 
     const { error: insertError } = await supabase.from('tournament_pairs').insert(payload);
-
     setSaving(false);
 
     if (insertError) {
@@ -351,152 +449,146 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
   }
 
   async function handleSaveResult() {
-  if (!resultForm) return;
+    if (!resultForm) return;
 
-  const { matchId, set1p1, set1p2, set2p1, set2p2, set3p1, set3p2 } = resultForm;
+    const { matchId, set1p1, set1p2, set2p1, set2p2, set3p1, set3p2 } = resultForm;
 
-  const s1p1 = parseInt(set1p1);
-  const s1p2 = parseInt(set1p2);
-  const s2p1 = parseInt(set2p1);
-  const s2p2 = parseInt(set2p2);
+    const s1p1 = parseInt(set1p1);
+    const s1p2 = parseInt(set1p2);
+    const s2p1 = parseInt(set2p1);
+    const s2p2 = parseInt(set2p2);
 
-  if (isNaN(s1p1) || isNaN(s1p2) || isNaN(s2p1) || isNaN(s2p2)) {
-    alert('Cargá al menos los primeros 2 sets.');
-    return;
-  }
-
-  const match = tournamentMatches.find((m) => m.id === matchId);
-  if (!match) return;
-
-  let setsP1 = 0;
-  let setsP2 = 0;
-  if (s1p1 > s1p2) setsP1++; else setsP2++;
-  if (s2p1 > s2p2) setsP1++; else setsP2++;
-
-  let s3p1: number | null = null;
-  let s3p2: number | null = null;
-
-  if (setsP1 === 1 && setsP2 === 1) {
-    s3p1 = parseInt(set3p1);
-    s3p2 = parseInt(set3p2);
-    if (isNaN(s3p1) || isNaN(s3p2)) {
-      alert('Hay empate en sets, cargá el 3er set.');
+    if (isNaN(s1p1) || isNaN(s1p2) || isNaN(s2p1) || isNaN(s2p2)) {
+      alert('Cargá al menos los primeros 2 sets.');
       return;
     }
-    if (s3p1 > s3p2) setsP1++; else setsP2++;
-  }
 
-  const winnerPairId = setsP1 > setsP2 ? match.pair1_id : match.pair2_id;
+    const match = tournamentMatches.find((m) => m.id === matchId);
+    if (!match) return;
 
-  setSaving(true);
+    let setsP1 = 0;
+    let setsP2 = 0;
+    if (s1p1 > s1p2) setsP1++; else setsP2++;
+    if (s2p1 > s2p2) setsP1++; else setsP2++;
 
-  // 1. Guardar resultado en tournament_matches
-  const { error: tournamentError } = await supabase
-    .from('tournament_matches')
-    .update({
-      set1_pair1: s1p1, set1_pair2: s1p2,
-      set2_pair1: s2p1, set2_pair2: s2p2,
-      set3_pair1: s3p1, set3_pair2: s3p2,
-      winner_pair_id: winnerPairId,
-      status: 'played',
-      played_at: new Date().toISOString(),
-    })
-    .eq('id', matchId);
+    let s3p1: number | null = null;
+    let s3p2: number | null = null;
 
-  if (tournamentError) {
-    alert(`No se pudo guardar el resultado: ${tournamentError.message}`);
+    if (setsP1 === 1 && setsP2 === 1) {
+      s3p1 = parseInt(set3p1);
+      s3p2 = parseInt(set3p2);
+      if (isNaN(s3p1) || isNaN(s3p2)) {
+        alert('Hay empate en sets, cargá el 3er set.');
+        return;
+      }
+      if (s3p1 > s3p2) setsP1++; else setsP2++;
+    }
+
+    const winnerPairId = setsP1 > setsP2 ? match.pair1_id : match.pair2_id;
+
+    setSaving(true);
+
+    const { error: tournamentError } = await supabase
+      .from('tournament_matches')
+      .update({
+        set1_pair1: s1p1, set1_pair2: s1p2,
+        set2_pair1: s2p1, set2_pair2: s2p2,
+        set3_pair1: s3p1, set3_pair2: s3p2,
+        winner_pair_id: winnerPairId,
+        status: 'played',
+        played_at: new Date().toISOString(),
+      })
+      .eq('id', matchId);
+
+    if (tournamentError) {
+      alert(`No se pudo guardar el resultado: ${tournamentError.message}`);
+      setSaving(false);
+      return;
+    }
+
+    const pair1 = tournamentPairs.find(p => p.id === match.pair1_id);
+    const pair2 = tournamentPairs.find(p => p.id === match.pair2_id);
+
+    if (!pair1 || !pair2) {
+      alert('No se encontraron las parejas.');
+      setSaving(false);
+      return;
+    }
+
+    const { data: rankingData, error: rankingError } = await supabase
+      .from('ranking_players')
+      .select('id, name')
+      .in('name', [
+        pair1.player1_name, pair1.player2_name,
+        pair2.player1_name, pair2.player2_name,
+      ]);
+
+    if (rankingError || !rankingData) {
+      alert(`No se pudieron obtener los jugadores del ranking: ${rankingError?.message}`);
+      setSaving(false);
+      return;
+    }
+
+    const findId = (name: string) =>
+      rankingData.find(p => p.name.trim().toLowerCase() === name.trim().toLowerCase())?.id;
+
+    const a1Id = findId(pair1.player1_name);
+    const a2Id = findId(pair1.player2_name);
+    const b1Id = findId(pair2.player1_name);
+    const b2Id = findId(pair2.player2_name);
+
+    if (!a1Id || !a2Id || !b1Id || !b2Id) {
+      alert('No se encontraron todos los jugadores en el ranking.');
+      setSaving(false);
+      return;
+    }
+
+    const winnerTeam = winnerPairId === match.pair1_id ? 'A' : 'B';
+
+    const multiplierMap: Record<string, number> = {
+      groups: 1.5,
+      quarters: 2.0,
+      semis: 2.5,
+      final: 3.0,
+      third_place: 2.5,
+    };
+    const tournamentMultiplier = multiplierMap[match.round] ?? 1.5;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const { error: matchError } = await supabase.from('matches').insert({
+      match_date: today,
+      match_time: null,
+      slot_id: null,
+      team_a_player_1_id: a1Id,
+      team_a_player_2_id: a2Id,
+      team_b_player_1_id: b1Id,
+      team_b_player_2_id: b2Id,
+      set1_a: s1p1, set1_b: s1p2,
+      set2_a: s2p1, set2_b: s2p2,
+      set3_a: s3p1, set3_b: s3p2,
+      winner_team: winnerTeam,
+      source: 'torneo',
+      tournament_multiplier: tournamentMultiplier,
+      notes: `Torneo ${match.round} — Grupo ${match.group_name || ''}`.trim(),
+    });
+
+    if (matchError) {
+      alert(`Se guardó el resultado del torneo pero no se pudo actualizar el ranking: ${matchError.message}`);
+      setSaving(false);
+      return;
+    }
+
+    const { error: recalcError } = await supabase.rpc('recalculate_rankings_v2');
+
+    if (recalcError) {
+      alert(`Resultado guardado pero error al recalcular rankings: ${recalcError.message}`);
+    }
+
     setSaving(false);
-    return;
+    setResultForm(null);
+    await loadData();
   }
 
-  // 2. Buscar nombres de los jugadores de cada pareja
-  const pair1 = tournamentPairs.find(p => p.id === match.pair1_id);
-  const pair2 = tournamentPairs.find(p => p.id === match.pair2_id);
-
-  if (!pair1 || !pair2) {
-    alert('No se encontraron las parejas.');
-    setSaving(false);
-    return;
-  }
-
-  // 3. Buscar IDs en ranking_players por nombre
-  const { data: rankingData, error: rankingError } = await supabase
-    .from('ranking_players')
-    .select('id, name')
-    .in('name', [
-      pair1.player1_name, pair1.player2_name,
-      pair2.player1_name, pair2.player2_name,
-    ]);
-
-  if (rankingError || !rankingData) {
-    alert(`No se pudieron obtener los jugadores del ranking: ${rankingError?.message}`);
-    setSaving(false);
-    return;
-  }
-
-  const findId = (name: string) =>
-    rankingData.find(p => p.name.trim().toLowerCase() === name.trim().toLowerCase())?.id;
-
-  const a1Id = findId(pair1.player1_name);
-  const a2Id = findId(pair1.player2_name);
-  const b1Id = findId(pair2.player1_name);
-  const b2Id = findId(pair2.player2_name);
-
-  if (!a1Id || !a2Id || !b1Id || !b2Id) {
-    alert('No se encontraron todos los jugadores en el ranking. Verificá que los nombres coincidan.');
-    setSaving(false);
-    return;
-  }
-
-  // 4. Determinar ganador en términos de team A/B
-  const winnerTeam = winnerPairId === match.pair1_id ? 'A' : 'B';
-
-  // 5. Multiplicador según ronda
-  const multiplierMap: Record<string, number> = {
-    groups: 1.5,
-    quarters: 2.0,
-    semis: 2.5,
-    final: 3.0,
-    third_place: 2.5,
-  };
-  const tournamentMultiplier = multiplierMap[match.round] ?? 1.5;
-
-  // 6. Insertar en matches
-  const today = new Date().toISOString().slice(0, 10);
-  const { error: matchError } = await supabase.from('matches').insert({
-    match_date: today,
-    match_time: null,
-    slot_id: null,
-    team_a_player_1_id: a1Id,
-    team_a_player_2_id: a2Id,
-    team_b_player_1_id: b1Id,
-    team_b_player_2_id: b2Id,
-    set1_a: s1p1, set1_b: s1p2,
-    set2_a: s2p1, set2_b: s2p2,
-    set3_a: s3p1, set3_b: s3p2,
-    winner_team: winnerTeam,
-    source: 'torneo',
-    tournament_multiplier: tournamentMultiplier,
-    notes: `Torneo ${match.round} — Grupo ${match.group_name || ''}`.trim(),
-  });
-
-  if (matchError) {
-    alert(`Se guardó el resultado del torneo pero no se pudo actualizar el ranking: ${matchError.message}`);
-    setSaving(false);
-    return;
-  }
-
-  // 7. Recalcular rankings
-  const { error: recalcError } = await supabase.rpc('recalculate_rankings_v2');
-
-  if (recalcError) {
-    alert(`Resultado guardado pero error al recalcular rankings: ${recalcError.message}`);
-  }
-
-  setSaving(false);
-  setResultForm(null);
-  await loadData();
-}
   async function handleConfirm() {
     if (!myPlayerName) { alert('Primero elegí tu jugador en la tab Ranking.'); return; }
     if (!isEligible) return;
@@ -753,11 +845,24 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
             if (pairs.length === 0) return null;
             const colors = groupColors[group];
 
+            // El grupo está completo si todos los partidos están jugados
+            const totalMatches = matches.length;
+            const playedMatches = matches.filter(m => m.status === 'played').length;
+            const groupComplete = totalMatches > 0 && totalMatches === playedMatches;
+
             return (
-              <div key={group} style={{ background: 'white', borderRadius: 20, padding: 20, border: `1px solid ${colors.border}` }}>
-                <h3 style={{ marginTop: 0, marginBottom: 16, color: colors.text }}>
+              <div key={group} style={{
+                background: 'white', borderRadius: 20, padding: 20,
+                border: groupComplete ? `2px solid ${colors.border}` : `1px solid ${colors.border}`
+              }}>
+                <h3 style={{ marginTop: 0, marginBottom: 16, color: colors.text, display: 'flex', alignItems: 'center', gap: 8 }}>
                   Grupo {group} — {pairs.length} parejas
-                  <span style={{ fontSize: 12, fontWeight: 400, color: '#6b7280', marginLeft: 8 }}>
+                  {groupComplete && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: colors.text, background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 999, padding: '2px 8px' }}>
+                      ✅ Finalizado
+                    </span>
+                  )}
+                  <span style={{ fontSize: 12, fontWeight: 400, color: '#6b7280', marginLeft: 4 }}>
                     Fecha límite: 27 de abril
                   </span>
                 </h3>
@@ -770,11 +875,38 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                       {standings.map((s, idx) => {
                         const isMyStanding = myPair && s.pair_id === myPair.id;
                         const advances = idx < 2;
+                        const isFirst = idx === 0;
+                        const isSecond = idx === 1;
+
+                        // Colores según posición cuando el grupo está completo
+                        let bgColor = isMyStanding ? colors.bg : advances ? '#f0fdf4' : '#f8fafc';
+                        let borderColor = isMyStanding ? colors.border : advances ? '#86efac' : '#e5e7eb';
+                        let badgeText = '';
+                        let badgeBg = '';
+                        let badgeColor = '';
+                        let badgeBorder = '';
+
+                        if (groupComplete && isFirst) {
+                          bgColor = '#fefce8';
+                          borderColor = '#fde047';
+                          badgeText = '🥇 1ro';
+                          badgeBg = '#fefce8';
+                          badgeColor = '#713f12';
+                          badgeBorder = '#fde047';
+                        } else if (groupComplete && isSecond) {
+                          bgColor = '#f8fafc';
+                          borderColor = '#cbd5e1';
+                          badgeText = '🥈 2do';
+                          badgeBg = '#f1f5f9';
+                          badgeColor = '#334155';
+                          badgeBorder = '#cbd5e1';
+                        }
+
                         return (
                           <div key={s.pair_id} style={{
                             display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10,
-                            background: isMyStanding ? colors.bg : advances ? '#f0fdf4' : '#f8fafc',
-                            border: isMyStanding ? `1px solid ${colors.border}` : advances ? '1px solid #86efac' : '1px solid #e5e7eb',
+                            background: bgColor,
+                            border: `1px solid ${borderColor}`,
                             fontSize: 13,
                           }}>
                             <span style={{ fontWeight: 800, minWidth: 20, color: advances ? '#166534' : '#9ca3af' }}>
@@ -788,11 +920,15 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                               <span>{s.sets_won}-{s.sets_lost}</span>
                               <span>{s.games_won}-{s.games_lost}</span>
                             </span>
-                            {advances && (
+                            {groupComplete && badgeText ? (
+                              <span style={{ fontSize: 11, fontWeight: 700, color: badgeColor, background: badgeBg, border: `1px solid ${badgeBorder}`, borderRadius: 999, padding: '2px 6px' }}>
+                                {badgeText}
+                              </span>
+                            ) : advances && !groupComplete ? (
                               <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 6px' }}>
                                 Avanza
                               </span>
-                            )}
+                            ) : null}
                           </div>
                         );
                       })}
