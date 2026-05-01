@@ -724,53 +724,45 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
         <div style={{ display: 'flex', flexDirection: 'column', width: 150 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>CUARTOS</div>
 
-          {/* QF1 */}
-          <div style={matchBoxStyle}>
-            <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
-              <span style={seedStyle}>S1</span><span>Vicente / Eze</span>
-            </div>
-            <div style={{ ...teamStyle, borderBottom: 'none' }}>
-              <span style={seedStyle}>S8</span><span>Mariano L / Fran S</span>
-            </div>
-          </div>
+         {/* QF1 */}
+<div style={matchBoxStyle}>
+  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
+    <span style={seedStyle}>S1</span><span>Vicente / Eze</span>
+  </div>
+  <div style={{ ...teamStyle, borderBottom: 'none' }}>
+    <span style={seedStyle}>S8</span><span>Mariano L / Fran S</span>
+  </div>
+</div>
 
-          <div style={{ height: 16 }} />
+{/* QF2 */}
+<div style={matchBoxStyle}>
+  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
+    <span style={seedStyle}>S4</span><span>Martin PI / Gaston R</span>
+  </div>
+  <div style={{ ...teamStyle, borderBottom: 'none' }}>
+    <span style={seedStyle}>S5</span><span>Hernan L / Daniel S</span>
+  </div>
+</div>
 
-          {/* QF2 */}
-          <div style={matchBoxStyle}>
-            <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
-              <span style={seedStyle}>S4</span><span>Martin PI / Gaston R</span>
-            </div>
-            <div style={{ ...teamStyle, borderBottom: 'none' }}>
-              <span style={seedStyle}>S6</span><span>Hernan L / Daniel S</span>
-            </div>
-          </div>
+{/* QF3 */}
+<div style={matchBoxStyle}>
+  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
+    <span style={seedStyle}>S2</span><span>Guille E / Adrian</span>
+  </div>
+  <div style={{ ...teamStyle, borderBottom: 'none' }}>
+    <span style={seedStyle}>S7</span><span>Jonas / Seba Z</span>
+  </div>
+</div>
 
-          <div style={{ height: 24 }} />
-
-          {/* QF3 */}
-          <div style={matchBoxStyle}>
-            <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
-              <span style={seedStyle}>S2</span><span>Guille E / Adrian</span>
-            </div>
-            <div style={{ ...teamStyle, borderBottom: 'none' }}>
-              <span style={seedStyle}>S7</span><span>Sergio / Facu</span>
-            </div>
-          </div>
-
-          <div style={{ height: 16 }} />
-
-          {/* QF4 */}
-          <div style={matchBoxStyle}>
-            <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
-              <span style={seedStyle}>S3</span><span>Ricky H / Fede S</span>
-            </div>
-            <div style={{ ...teamStyle, borderBottom: 'none' }}>
-              <span style={seedStyle}>S5</span><span>Jonas / Seba Z</span>
-            </div>
-          </div>
-        </div>
-
+{/* QF4 */}
+<div style={matchBoxStyle}>
+  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
+    <span style={seedStyle}>S3</span><span>Ricky H / Fede S</span>
+  </div>
+  <div style={{ ...teamStyle, borderBottom: 'none' }}>
+    <span style={seedStyle}>S6</span><span>Sergio / Facu</span>
+  </div>
+</div>
        {/* CONECTORES QF → SF */}
 <svg width="32" height="350" style={{ flexShrink: 0 }}>
   {/* QF1 centro */}
