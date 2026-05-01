@@ -11,7 +11,7 @@ const supabase = createClient(
 
 const MIN_MATCHES = 5;
 const TOURNAMENT_ID = 1;
-const SHOW_BRACKET = false; // cambiar a true para mostrar a todos
+const SHOW_BRACKET = false;
 
 type TournamentPair = {
   id: number;
@@ -57,11 +57,6 @@ type GroupStanding = {
   set_diff: number;
   game_diff: number;
   group_rank: number;
-};
-
-type BracketEntry = {
-  seed: string;
-  name: string;
 };
 
 type Props = {
@@ -212,16 +207,6 @@ function computeStandings(
   return result;
 }
 
-// Bracket fijo cuartos de final
-const BRACKET: { qf: { top: BracketEntry; bottom: BracketEntry }[] } = {
-  qf: [
-    { top: { seed: 'S1', name: 'Vicente / Eze' }, bottom: { seed: 'S8', name: 'Mariano L / Fran S' } },
-    { top: { seed: 'S4', name: 'Martin PI / Gaston R' }, bottom: { seed: 'S6', name: 'Jonas / Seba Z' } },
-    { top: { seed: 'S2', name: 'Guille E / Adrian' }, bottom: { seed: 'S7', name: 'Sergio / Facu' } },
-    { top: { seed: 'S3', name: 'Ricky H / Fede S' }, bottom: { seed: 'S5', name: 'Hernan L / Daniel S' } },
-  ],
-};
-
 const teamStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -247,7 +232,11 @@ const matchBoxStyle: React.CSSProperties = {
 };
 
 const tbdStyle: React.CSSProperties = {
-  ...teamStyle,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '7px 10px',
+  fontSize: 12,
   color: '#9ca3af',
   fontStyle: 'italic',
 };
@@ -692,15 +681,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
   const hasMatches = tournamentMatches.filter((m) => m.round === 'groups').length > 0;
   const showBracket = SHOW_BRACKET || adminUnlocked;
 
-  const connectorStyle = (height: number): React.CSSProperties => ({
-    width: 8,
-    height,
-    borderRight: '1px solid #e5e7eb',
-    borderTop: '1px solid #e5e7eb',
-    borderBottom: '1px solid #e5e7eb',
-    flexShrink: 0,
-  });
-
   return (
     <div style={{ display: 'grid', gap: 16 }}>
 
@@ -712,128 +692,122 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
         </p>
       </div>
 
-      {/* Bracket cuartos */}
-{showBracket && (
-  <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-    <h3 style={{ marginTop: 0, marginBottom: 16 }}>Cuadro — Cuartos a Final</h3>
+      {/* Bracket */}
+      {showBracket && (
+        <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 16 }}>Cuadro — Cuartos a Final</h3>
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ display: 'flex', minWidth: 520, alignItems: 'flex-start' }}>
 
-    <div style={{ overflowX: 'auto' }}>
-      <div style={{ display: 'flex', minWidth: 520, gap: 0 }}>
+              {/* CUARTOS */}
+              <div style={{ display: 'flex', flexDirection: 'column', width: 150, gap: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>CUARTOS</div>
 
-        {/* CUARTOS */}
-        <div style={{ display: 'flex', flexDirection: 'column', width: 150 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>CUARTOS</div>
+                <div style={matchBoxStyle}>
+                  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
+                    <span style={seedStyle}>S1</span><span>Vicente / Eze</span>
+                  </div>
+                  <div style={{ ...teamStyle, borderBottom: 'none' }}>
+                    <span style={seedStyle}>S8</span><span>Mariano L / Fran S</span>
+                  </div>
+                </div>
 
-        {/* QF1 */}
-<div style={matchBoxStyle}>
-  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
-    <span style={seedStyle}>S1</span><span>Vicente / Eze</span>
-  </div>
-  <div style={{ ...teamStyle, borderBottom: 'none' }}>
-    <span style={seedStyle}>S8</span><span>Mariano L / Fran S</span>
-  </div>
-</div>
+                <div style={{ height: 16 }} />
 
-{/* QF2 */}
-<div style={matchBoxStyle}>
-  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
-    <span style={seedStyle}>S4</span><span>Martin PI / Gaston R</span>
-  </div>
-  <div style={{ ...teamStyle, borderBottom: 'none' }}>
-    <span style={seedStyle}>S5</span><span>Hernan L / Daniel S</span>
-  </div>
-</div>
+                <div style={matchBoxStyle}>
+                  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
+                    <span style={seedStyle}>S4</span><span>Martin PI / Gaston R</span>
+                  </div>
+                  <div style={{ ...teamStyle, borderBottom: 'none' }}>
+                    <span style={seedStyle}>S5</span><span>Hernan L / Daniel S</span>
+                  </div>
+                </div>
 
-{/* QF3 */}
-<div style={matchBoxStyle}>
-  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
-    <span style={seedStyle}>S2</span><span>Guille E / Adrian</span>
-  </div>
-  <div style={{ ...teamStyle, borderBottom: 'none' }}>
-    <span style={seedStyle}>S7</span><span>Jonas / Seba Z</span>
-  </div>
-</div>
+                <div style={{ height: 24 }} />
 
-{/* QF4 */}
-<div style={matchBoxStyle}>
-  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
-    <span style={seedStyle}>S3</span><span>Ricky H / Fede S</span>
-  </div>
-  <div style={{ ...teamStyle, borderBottom: 'none' }}>
-    <span style={seedStyle}>S6</span><span>Sergio / Facu</span>
-  </div>
-</div>
-       {/* CONECTORES QF → SF */}
-<svg width="32" height="350" style={{ flexShrink: 0 }}>
-  {/* QF1 centro */}
-  <line x1="0" y1="47" x2="16" y2="47" stroke="#e5e7eb" strokeWidth="1" />
-  {/* QF2 centro */}
-  <line x1="0" y1="123" x2="16" y2="123" stroke="#e5e7eb" strokeWidth="1" />
-  {/* vertical QF1-QF2 */}
-  <line x1="16" y1="47" x2="16" y2="123" stroke="#e5e7eb" strokeWidth="1" />
-  {/* horizontal al SF1 */}
-  <line x1="16" y1="85" x2="32" y2="85" stroke="#e5e7eb" strokeWidth="1" />
+                <div style={matchBoxStyle}>
+                  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
+                    <span style={seedStyle}>S2</span><span>Guille E / Adrian</span>
+                  </div>
+                  <div style={{ ...teamStyle, borderBottom: 'none' }}>
+                    <span style={seedStyle}>S7</span><span>Jonas / Seba Z</span>
+                  </div>
+                </div>
 
-  {/* QF3 centro */}
-  <line x1="0" y1="218" x2="16" y2="218" stroke="#e5e7eb" strokeWidth="1" />
-  {/* QF4 centro */}
-  <line x1="0" y1="288" x2="16" y2="288" stroke="#e5e7eb" strokeWidth="1" />
-  {/* vertical QF3-QF4 */}
-  <line x1="16" y1="218" x2="16" y2="288" stroke="#e5e7eb" strokeWidth="1" />
-  {/* horizontal al SF2 */}
-  <line x1="16" y1="253" x2="32" y2="253" stroke="#e5e7eb" strokeWidth="1" />
-</svg>
+                <div style={{ height: 16 }} />
 
-        {/* SEMIS */}
-        <div style={{ display: 'flex', flexDirection: 'column', width: 150, paddingTop: 62 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#c2410c', marginBottom: 8 }}>SEMIS</div>
+                <div style={matchBoxStyle}>
+                  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
+                    <span style={seedStyle}>S3</span><span>Ricky H / Fede S</span>
+                  </div>
+                  <div style={{ ...teamStyle, borderBottom: 'none' }}>
+                    <span style={seedStyle}>S6</span><span>Sergio / Facu</span>
+                  </div>
+                </div>
+              </div>
 
-          {/* SF1 */}
-          <div style={matchBoxStyle}>
-            <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador QF1</div>
-            <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador QF2</div>
-          </div>
+              {/* CONECTORES QF → SF */}
+              <svg width="32" height="350" style={{ flexShrink: 0 }}>
+                <line x1="0" y1="47" x2="16" y2="47" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="0" y1="123" x2="16" y2="123" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="16" y1="47" x2="16" y2="123" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="16" y1="85" x2="32" y2="85" stroke="#e5e7eb" strokeWidth="1" />
 
-          <div style={{ height: 76 }} />
+                <line x1="0" y1="218" x2="16" y2="218" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="0" y1="288" x2="16" y2="288" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="16" y1="218" x2="16" y2="288" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="16" y1="253" x2="32" y2="253" stroke="#e5e7eb" strokeWidth="1" />
+              </svg>
 
-          {/* SF2 */}
-          <div style={matchBoxStyle}>
-            <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador QF3</div>
-            <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador QF4</div>
+              {/* SEMIS */}
+              <div style={{ display: 'flex', flexDirection: 'column', width: 150, paddingTop: 62 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#c2410c', marginBottom: 8 }}>SEMIS</div>
+
+                <div style={matchBoxStyle}>
+                  <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador QF1</div>
+                  <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador QF2</div>
+                </div>
+
+                <div style={{ height: 76 }} />
+
+                <div style={matchBoxStyle}>
+                  <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador QF3</div>
+                  <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador QF4</div>
+                </div>
+              </div>
+
+              {/* CONECTORES SF → F */}
+              <svg width="32" height="350" style={{ flexShrink: 0 }}>
+                <line x1="0" y1="147" x2="16" y2="147" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="0" y1="283" x2="16" y2="283" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="16" y1="147" x2="16" y2="283" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="16" y1="215" x2="32" y2="215" stroke="#e5e7eb" strokeWidth="1" />
+              </svg>
+
+              {/* FINAL */}
+              <div style={{ display: 'flex', flexDirection: 'column', width: 150, paddingTop: 192 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#b45309', marginBottom: 8 }}>FINAL</div>
+                <div style={matchBoxStyle}>
+                  <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador SF1</div>
+                  <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador SF2</div>
+                </div>
+                <div style={{ textAlign: 'center', fontSize: 11, color: '#b45309', fontWeight: 700, marginTop: 6 }}>Campeón</div>
+              </div>
+
+            </div>
+
+            {/* 3ER PUESTO */}
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 8 }}>3ER PUESTO</div>
+              <div style={{ ...matchBoxStyle, maxWidth: 280 }}>
+                <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Perdedor SF1</div>
+                <div style={{ ...tbdStyle, borderBottom: 'none' }}>Perdedor SF2</div>
+              </div>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* CONECTORES SF → F */}
-        <svg width="32" style={{ overflow: 'visible', flexShrink: 0 }}>
-          <line x1="0" y1="147" x2="16" y2="147" stroke="#e5e7eb" strokeWidth="1" />
-          <line x1="0" y1="283" x2="16" y2="283" stroke="#e5e7eb" strokeWidth="1" />
-          <line x1="16" y1="147" x2="16" y2="283" stroke="#e5e7eb" strokeWidth="1" />
-          <line x1="16" y1="215" x2="32" y2="215" stroke="#e5e7eb" strokeWidth="1" />
-        </svg>
-
-        {/* FINAL */}
-        <div style={{ display: 'flex', flexDirection: 'column', width: 150, paddingTop: 192 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#b45309', marginBottom: 8 }}>FINAL</div>
-          <div style={matchBoxStyle}>
-            <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador SF1</div>
-            <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador SF2</div>
-          </div>
-          <div style={{ textAlign: 'center', fontSize: 11, color: '#b45309', fontWeight: 700, marginTop: 6 }}>Campeón</div>
-        </div>
-
-      </div>
-
-      {/* 3ER PUESTO */}
-      <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 8 }}>3ER PUESTO</div>
-        <div style={{ ...matchBoxStyle, maxWidth: 280 }}>
-          <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Perdedor SF1</div>
-          <div style={{ ...tbdStyle, borderBottom: 'none' }}>Perdedor SF2</div>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
       {/* Panel admin */}
       {adminUnlocked && (
         <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '2px solid #111827' }}>
