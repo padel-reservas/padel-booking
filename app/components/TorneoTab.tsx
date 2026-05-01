@@ -724,7 +724,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
         <div style={{ display: 'flex', flexDirection: 'column', width: 150 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>CUARTOS</div>
 
-         {/* QF1 */}
+        {/* QF1 */}
 <div style={matchBoxStyle}>
   <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
     <span style={seedStyle}>S1</span><span>Vicente / Eze</span>
