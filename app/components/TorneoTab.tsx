@@ -772,23 +772,25 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
         </div>
 
         {/* CONECTORES QF → SF */}
-        <svg width="32" style={{ overflow: 'visible', flexShrink: 0 }}>
-          {/* QF1 + QF2 → SF1 */}
-          {/* línea derecha QF1 (centro aprox y=27) */}
-          <line x1="0" y1="47" x2="16" y2="47" stroke="#e5e7eb" strokeWidth="1" />
-          {/* línea derecha QF2 (centro aprox y=103) */}
-          <line x1="0" y1="123" x2="16" y2="123" stroke="#e5e7eb" strokeWidth="1" />
-          {/* línea vertical uniendo QF1 y QF2 */}
-          <line x1="16" y1="47" x2="16" y2="123" stroke="#e5e7eb" strokeWidth="1" />
-          {/* línea horizontal al centro → SF1 */}
-          <line x1="16" y1="85" x2="32" y2="85" stroke="#e5e7eb" strokeWidth="1" />
+<svg width="32" height="350" style={{ flexShrink: 0 }}>
+  {/* QF1 centro */}
+  <line x1="0" y1="27" x2="16" y2="27" stroke="#e5e7eb" strokeWidth="1" />
+  {/* QF2 centro */}
+  <line x1="0" y1="97" x2="16" y2="97" stroke="#e5e7eb" strokeWidth="1" />
+  {/* vertical QF1-QF2 */}
+  <line x1="16" y1="27" x2="16" y2="97" stroke="#e5e7eb" strokeWidth="1" />
+  {/* horizontal al SF1 */}
+  <line x1="16" y1="62" x2="32" y2="62" stroke="#e5e7eb" strokeWidth="1" />
 
-          {/* QF3 + QF4 → SF2 */}
-          <line x1="0" y1="187" x2="16" y2="187" stroke="#e5e7eb" strokeWidth="1" />
-          <line x1="0" y1="263" x2="16" y2="263" stroke="#e5e7eb" strokeWidth="1" />
-          <line x1="16" y1="187" x2="16" y2="263" stroke="#e5e7eb" strokeWidth="1" />
-          <line x1="16" y1="225" x2="32" y2="225" stroke="#e5e7eb" strokeWidth="1" />
-        </svg>
+  {/* QF3 centro */}
+  <line x1="0" y1="218" x2="16" y2="218" stroke="#e5e7eb" strokeWidth="1" />
+  {/* QF4 centro */}
+  <line x1="0" y1="288" x2="16" y2="288" stroke="#e5e7eb" strokeWidth="1" />
+  {/* vertical QF3-QF4 */}
+  <line x1="16" y1="218" x2="16" y2="288" stroke="#e5e7eb" strokeWidth="1" />
+  {/* horizontal al SF2 */}
+  <line x1="16" y1="253" x2="32" y2="253" stroke="#e5e7eb" strokeWidth="1" />
+</svg>
 
         {/* SEMIS */}
         <div style={{ display: 'flex', flexDirection: 'column', width: 150, paddingTop: 62 }}>
