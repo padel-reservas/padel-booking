@@ -11,7 +11,7 @@ const supabase = createClient(
 
 const MIN_MATCHES = 5;
 const TOURNAMENT_ID = 1;
-const SHOW_BRACKET = false;
+const SHOW_BRACKET = true;
 
 type TournamentPair = {
   id: number;
