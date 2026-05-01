@@ -742,7 +742,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
               <span style={seedStyle}>S4</span><span>Martin PI / Gaston R</span>
             </div>
             <div style={{ ...teamStyle, borderBottom: 'none' }}>
-              <span style={seedStyle}>S6</span><span>Jonas / Seba Z</span>
+              <span style={seedStyle}>S6</span><span>Hernan L / Daniel S</span>
             </div>
           </div>
 
@@ -766,7 +766,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
               <span style={seedStyle}>S3</span><span>Ricky H / Fede S</span>
             </div>
             <div style={{ ...teamStyle, borderBottom: 'none' }}>
-              <span style={seedStyle}>S5</span><span>Hernan L / Daniel S</span>
+              <span style={seedStyle}>S5</span><span>Jonas / Seba Z</span>
             </div>
           </div>
         </div>
