@@ -11,6 +11,7 @@ const supabase = createClient(
 
 const MIN_MATCHES = 5;
 const TOURNAMENT_ID = 1;
+const SHOW_BRACKET = false; // cambiar a true para mostrar a todos
 
 type TournamentPair = {
   id: number;
@@ -56,6 +57,11 @@ type GroupStanding = {
   set_diff: number;
   game_diff: number;
   group_rank: number;
+};
+
+type BracketEntry = {
+  seed: string;
+  name: string;
 };
 
 type Props = {
@@ -117,20 +123,17 @@ function assignGroupsSerpenteo(pairs: { player1: string; player2: string; combin
   }));
 }
 
-// Calcula standings con desempate correcto
 function computeStandings(
   standings: GroupStanding[],
   matches: TournamentMatch[]
 ): GroupStanding[] {
   if (standings.length === 0) return [];
 
-  // Agrupa por puntos
   const sorted = [...standings].sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     return 0;
   });
 
-  // Función para obtener resultado head to head entre dos parejas
   function getH2HWinner(pairIdA: number, pairIdB: number): number | null {
     const match = matches.find(
       (m) => m.status === 'played' && (
@@ -141,7 +144,6 @@ function computeStandings(
     return match?.winner_pair_id ?? null;
   }
 
-  // Función para calcular stats solo entre un subconjunto de parejas
   function getStatsAmong(pairId: number, pairIds: number[]): { setDiff: number; gameDiff: number } {
     let setsWon = 0, setsLost = 0, gamesWon = 0, gamesLost = 0;
 
@@ -174,12 +176,10 @@ function computeStandings(
     return { setDiff: setsWon - setsLost, gameDiff: gamesWon - gamesLost };
   }
 
-  // Resolver empates dentro de cada grupo de puntos iguales
   const result: GroupStanding[] = [];
   let i = 0;
 
   while (i < sorted.length) {
-    // Encontrar el rango de empatados
     let j = i;
     while (j < sorted.length && sorted[j].points === sorted[i].points) j++;
     const tiedGroup = sorted.slice(i, j);
@@ -187,19 +187,16 @@ function computeStandings(
     if (tiedGroup.length === 1) {
       result.push(tiedGroup[0]);
     } else if (tiedGroup.length === 2) {
-      // Head to head
       const winner = getH2HWinner(tiedGroup[0].pair_id, tiedGroup[1].pair_id);
       if (winner === tiedGroup[0].pair_id) {
         result.push(tiedGroup[0], tiedGroup[1]);
       } else if (winner === tiedGroup[1].pair_id) {
         result.push(tiedGroup[1], tiedGroup[0]);
       } else {
-        // Sin head to head todavía — usar set diff general
         const bySetDiff = [...tiedGroup].sort((a, b) => b.set_diff - a.set_diff || b.game_diff - a.game_diff);
         result.push(...bySetDiff);
       }
     } else {
-      // Triple empate o más — sets y games solo entre empatados
       const tiedIds = tiedGroup.map((s) => s.pair_id);
       const withStats = tiedGroup.map((s) => {
         const stats = getStatsAmong(s.pair_id, tiedIds);
@@ -214,6 +211,46 @@ function computeStandings(
 
   return result;
 }
+
+// Bracket fijo cuartos de final
+const BRACKET: { qf: { top: BracketEntry; bottom: BracketEntry }[] } = {
+  qf: [
+    { top: { seed: 'S1', name: 'Vicente / Eze' }, bottom: { seed: 'S8', name: 'Mariano L / Fran S' } },
+    { top: { seed: 'S4', name: 'Martin PI / Gaston R' }, bottom: { seed: 'S6', name: 'Jonas / Seba Z' } },
+    { top: { seed: 'S2', name: 'Guille E / Adrian' }, bottom: { seed: 'S7', name: 'Sergio / Facu' } },
+    { top: { seed: 'S3', name: 'Ricky H / Fede S' }, bottom: { seed: 'S5', name: 'Hernan L / Daniel S' } },
+  ],
+};
+
+const teamStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '7px 10px',
+  fontSize: 12,
+  color: '#111827',
+  borderBottom: '1px solid #e5e7eb',
+};
+
+const seedStyle: React.CSSProperties = {
+  fontSize: 10,
+  color: '#9ca3af',
+  minWidth: 20,
+  fontWeight: 700,
+};
+
+const matchBoxStyle: React.CSSProperties = {
+  background: 'white',
+  border: '1px solid #e5e7eb',
+  borderRadius: 10,
+  overflow: 'hidden',
+};
+
+const tbdStyle: React.CSSProperties = {
+  ...teamStyle,
+  color: '#9ca3af',
+  fontStyle: 'italic',
+};
 
 const groupColors: Record<string, { bg: string; border: string; text: string }> = {
   A: { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af' },
@@ -313,7 +350,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
     return acc;
   }, {} as Record<string, TournamentMatch[]>);
 
-  // Usar computeStandings en vez del rank de Supabase
   const standingsByGroup = ['A', 'B', 'C', 'D'].reduce((acc, group) => {
     const raw = groupStandings.filter((s) => s.group_name === group);
     const groupMatches = matchesByGroup[group] || [];
@@ -654,6 +690,16 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
   }
 
   const hasMatches = tournamentMatches.filter((m) => m.round === 'groups').length > 0;
+  const showBracket = SHOW_BRACKET || adminUnlocked;
+
+  const connectorStyle = (height: number): React.CSSProperties => ({
+    width: 8,
+    height,
+    borderRight: '1px solid #e5e7eb',
+    borderTop: '1px solid #e5e7eb',
+    borderBottom: '1px solid #e5e7eb',
+    flexShrink: 0,
+  });
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -665,6 +711,93 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
           Fase de grupos — fecha límite: <strong>27 de abril</strong>
         </p>
       </div>
+
+      {/* Bracket cuartos */}
+      {showBracket && (
+        <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 16 }}>Cuadro — Cuartos a Final</h3>
+
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ display: 'flex', gap: 0, minWidth: 480, alignItems: 'flex-start' }}>
+
+              {/* Cuartos */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 140 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', marginBottom: 4 }}>CUARTOS</div>
+                {BRACKET.qf.map((match, idx) => (
+                  <div key={idx} style={matchBoxStyle}>
+                    <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>
+                      <span style={seedStyle}>{match.top.seed}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600 }}>{match.top.name}</span>
+                    </div>
+                    <div style={{ ...teamStyle, borderBottom: 'none' }}>
+                      <span style={seedStyle}>{match.bottom.seed}</span>
+                      <span style={{ fontSize: 12 }}>{match.bottom.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Conectores QF → SF */}
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-around', paddingTop: 20, gap: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 8 }}>
+                  <div style={connectorStyle(40)} />
+                  <div style={{ width: 8, height: 8, borderBottom: '1px solid #e5e7eb' }} />
+                  <div style={connectorStyle(40)} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={connectorStyle(40)} />
+                  <div style={{ width: 8, height: 8, borderBottom: '1px solid #e5e7eb' }} />
+                  <div style={connectorStyle(40)} />
+                </div>
+              </div>
+
+              {/* Semis */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 140, paddingTop: 36 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', marginBottom: 4 }}>SEMIS</div>
+                <div style={matchBoxStyle}>
+                  <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador QF1</div>
+                  <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador QF2</div>
+                </div>
+                <div style={{ marginTop: 72 }}>
+                  <div style={matchBoxStyle}>
+                    <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador QF3</div>
+                    <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador QF4</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Conectores SF → F */}
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingTop: 120 }}>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={connectorStyle(50)} />
+                  <div style={{ width: 8, height: 8, borderBottom: '1px solid #e5e7eb' }} />
+                  <div style={connectorStyle(50)} />
+                </div>
+              </div>
+
+              {/* Final */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 140, paddingTop: 136 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', marginBottom: 4 }}>FINAL</div>
+                <div style={matchBoxStyle}>
+                  <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador SF1</div>
+                  <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador SF2</div>
+                </div>
+                <div style={{ textAlign: 'center', fontSize: 12, color: '#9ca3af', marginTop: 6 }}>Campeón</div>
+              </div>
+
+            </div>
+
+            {/* 3er puesto */}
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', marginBottom: 8 }}>3ER PUESTO</div>
+              <div style={{ ...matchBoxStyle, maxWidth: 280 }}>
+                <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Perdedor SF1</div>
+                <div style={{ ...tbdStyle, borderBottom: 'none' }}>Perdedor SF2</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Panel admin */}
       {adminUnlocked && (
@@ -845,7 +978,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
             if (pairs.length === 0) return null;
             const colors = groupColors[group];
 
-            // El grupo está completo si todos los partidos están jugados
             const totalMatches = matches.length;
             const playedMatches = matches.filter(m => m.status === 'played').length;
             const groupComplete = totalMatches > 0 && totalMatches === playedMatches;
@@ -867,7 +999,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                   </span>
                 </h3>
 
-                {/* Tabla de posiciones */}
                 {standings.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 8 }}>POSICIONES</div>
@@ -878,7 +1009,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                         const isFirst = idx === 0;
                         const isSecond = idx === 1;
 
-                        // Colores según posición cuando el grupo está completo
                         let bgColor = isMyStanding ? colors.bg : advances ? '#f0fdf4' : '#f8fafc';
                         let borderColor = isMyStanding ? colors.border : advances ? '#86efac' : '#e5e7eb';
                         let badgeText = '';
@@ -905,9 +1035,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                         return (
                           <div key={s.pair_id} style={{
                             display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10,
-                            background: bgColor,
-                            border: `1px solid ${borderColor}`,
-                            fontSize: 13,
+                            background: bgColor, border: `1px solid ${borderColor}`, fontSize: 13,
                           }}>
                             <span style={{ fontWeight: 800, minWidth: 20, color: advances ? '#166534' : '#9ca3af' }}>
                               {idx + 1}
@@ -936,7 +1064,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                   </div>
                 )}
 
-                {/* Partidos agrupados por fecha */}
                 {matches.length > 0 && (
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 8 }}>PARTIDOS</div>
@@ -1058,7 +1185,6 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                   </div>
                 )}
 
-                {/* Solo parejas si no hay partidos */}
                 {matches.length === 0 && (
                   <div style={{ display: 'grid', gap: 8 }}>
                     {pairs.map((pair) => {
