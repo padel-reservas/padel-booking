@@ -17,6 +17,7 @@ import { APP_VERSION } from './lib/appVersion';
 import TorneoTab from './components/TorneoTab';
 import ApuestasTab from './components/ApuestasTab';
 import AsadoTab from './components/AsadoTab';
+import CopaDeLecheTab from './components/CopaDeLecheTab';
 
 import type {
   ActivityMatch,
@@ -2349,6 +2350,7 @@ export default function Page() {
           {tabButton('Torneo', 'torneo')}
           {tabButton('Apuestas', 'apuestas')}
           {tabButton('Asado', 'asado')}
+          {tabButton('Copa de Leche', 'copadeLeche')}
           {canSeeAdmin && activeTab === 'turnos' && (
             <button
               onClick={() => setShowAdmin(!showAdmin)}
@@ -3551,6 +3553,13 @@ export default function Page() {
 )}
       {!loading && activeTab === 'asado' && (
   <AsadoTab
+    rankingPlayers={rankingPlayers}
+    myPlayerName={myPlayerName}
+    adminUnlocked={adminUnlocked}
+  />
+)}
+      {!loading && activeTab === 'copadeLeche' && (
+  <CopaDeLecheTab
     rankingPlayers={rankingPlayers}
     myPlayerName={myPlayerName}
     adminUnlocked={adminUnlocked}
