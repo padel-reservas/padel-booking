@@ -135,6 +135,29 @@ export async function POST(req: Request) {
 
       await validateSubmitterForSlot(slot_id, submitted_by_player_id);
 
+      // Detectar multiplicador según tournament_group del slot
+      const { data: slotData } = await supabase
+        .from('slots')
+        .select('tournament_group')
+        .eq('id', slot_id)
+        .maybeSingle();
+
+      const tournamentGroup = slotData?.tournament_group ?? null;
+
+      const multiplierMap: Record<string, number> = {
+        QF: 2.0,
+        SF: 2.5,
+        F: 3.0,
+        TP: 2.5,
+        A: 1.5,
+        B: 1.5,
+        C: 1.5,
+        D: 1.5,
+      };
+
+      const tournamentMultiplier = tournamentGroup ? (multiplierMap[tournamentGroup] ?? 1.0) : 1.0;
+      const matchSource = tournamentGroup ? 'torneo' : (source || 'slot');
+
       const payload = {
         match_date,
         match_time,
@@ -150,10 +173,11 @@ export async function POST(req: Request) {
         set3_a,
         set3_b,
         winner_team,
-        source: source || 'slot',
+        source: matchSource,
         notes: notes || null,
         submitted_by_player_id,
         submitted_at: new Date().toISOString(),
+        tournament_multiplier: tournamentMultiplier,
       };
 
       const { error } = await supabase.from('matches').insert(payload);
