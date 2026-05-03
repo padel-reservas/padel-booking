@@ -152,10 +152,16 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
   const posE = calcularPosiciones('E');
   const posF = calcularPosiciones('F');
 
+  const grupoECompleto = PARTIDOS_GRUPOS['E'].every(p => resultados[p.id]);
+  const grupoFCompleto = PARTIDOS_GRUPOS['F'].every(p => resultados[p.id]);
+  const ambosGruposCompletos = grupoECompleto && grupoFCompleto;
+
   const sf1p1 = posE[0]?.nombre || '1ro Grupo E';
   const sf1p2 = posF[1]?.nombre || '2do Grupo F';
   const sf2p1 = posF[0]?.nombre || '1ro Grupo F';
   const sf2p2 = posE[1]?.nombre || '2do Grupo E';
+
+  const semisCompletas = resultados['SF1R'] && resultados['SF2R'];
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -172,7 +178,7 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
       {(['E', 'F'] as const).map(grupo => {
         const colors = groupColors[grupo];
         const posiciones = grupo === 'E' ? posE : posF;
-        const todosJugados = PARTIDOS_GRUPOS[grupo].every(p => resultados[p.id]);
+        const todosJugados = grupo === 'E' ? grupoECompleto : grupoFCompleto;
 
         return (
           <div key={grupo} style={{
@@ -249,59 +255,63 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
         );
       })}
 
-      {/* Semis */}
-      <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-        <h3 style={{ marginTop: 0, marginBottom: 12 }}>Semifinales</h3>
-        <div style={{ display: 'grid', gap: 8 }}>
-          {[
-            { id: 'SF1R', label: 'SF1', p1: sf1p1, p2: sf1p2 },
-            { id: 'SF2R', label: 'SF2', p1: sf2p1, p2: sf2p2 },
-          ].map(sf => {
-            const r = resultados[sf.id];
-            return (
-              <div key={sf.id} style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6 }}>{sf.label}</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>
-                    {sf.p1}<span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>{sf.p2}
-                  </div>
-                  {r && (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>{r.sets}</span>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 8px' }}>{r.ganador}</span>
+      {/* Semis — solo cuando ambos grupos estén completos */}
+      {ambosGruposCompletos && (
+        <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 12 }}>Semifinales</h3>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {[
+              { id: 'SF1R', label: 'SF1', p1: sf1p1, p2: sf1p2 },
+              { id: 'SF2R', label: 'SF2', p1: sf2p1, p2: sf2p2 },
+            ].map(sf => {
+              const r = resultados[sf.id];
+              return (
+                <div key={sf.id} style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6 }}>{sf.label}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                      {sf.p1}<span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>{sf.p2}
                     </div>
-                  )}
+                    {r && (
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>{r.sets}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 8px' }}>{r.ganador}</span>
+                      </div>
+                    )}
+                  </div>
+                  {renderPartidoForm(sf.id, sf.p1, sf.p2)}
                 </div>
-                {renderPartidoForm(sf.id, sf.p1, sf.p2)}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Final */}
-      <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-        <h3 style={{ marginTop: 0, marginBottom: 12 }}>Final 🏆</h3>
-        <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>
-              {resultados['SF1R']?.ganador || 'Ganador SF1'}
-              <span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>
-              {resultados['SF2R']?.ganador || 'Ganador SF2'}
-            </div>
-            {resultados['FINAL'] && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>{resultados['FINAL'].sets}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#713f12', background: '#fefce8', border: '1px solid #fde047', borderRadius: 999, padding: '2px 8px' }}>🏆 {resultados['FINAL'].ganador}</span>
+      {/* Final — solo cuando ambas semis estén jugadas */}
+      {semisCompletas && (
+        <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 12 }}>Final 🏆</h3>
+          <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                {resultados['SF1R']?.ganador || 'Ganador SF1'}
+                <span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>
+                {resultados['SF2R']?.ganador || 'Ganador SF2'}
               </div>
+              {resultados['FINAL'] && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>{resultados['FINAL'].sets}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#713f12', background: '#fefce8', border: '1px solid #fde047', borderRadius: 999, padding: '2px 8px' }}>🏆 {resultados['FINAL'].ganador}</span>
+                </div>
+              )}
+            </div>
+            {renderPartidoForm('FINAL',
+              resultados['SF1R']?.ganador || 'Ganador SF1',
+              resultados['SF2R']?.ganador || 'Ganador SF2'
             )}
           </div>
-          {renderPartidoForm('FINAL',
-            resultados['SF1R']?.ganador || 'Ganador SF1',
-            resultados['SF2R']?.ganador || 'Ganador SF2'
-          )}
         </div>
-      </div>
+      )}
 
     </div>
   );
