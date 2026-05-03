@@ -764,7 +764,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#c2410c', marginBottom: 8 }}>SEMIS</div>
 
                 <div style={matchBoxStyle}>
-                  <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador QF1</div>
+                  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>Vicente / Eze</div>
                   <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador QF2</div>
                 </div>
 
