@@ -395,23 +395,31 @@ export default function TurnosTab({
                         <>
                           <button
                             onClick={async () => {
-                              const input = window.prompt(
-                                'Monto por jugador (ej: 25):',
-                                slot.amount?.toString() || ''
-                              );
-                              if (input === null) return;
-                              const parsed = parseFloat(input.replace(',', '.'));
-                              if (isNaN(parsed) || parsed < 0) {
-                                window.alert('Monto inválido.');
-                                return;
-                              }
-                              const result = await adminAction({
-                                action: 'updateSlotAmount',
-                                slotId: slot.id,
-                                amount: parsed,
-                              });
-                              if (result.ok) await loadData();
-                            }}
+  const input = window.prompt(
+    'Monto por jugador (ej: 25):',
+    slot.amount?.toString() || ''
+  );
+  if (input === null) return;
+  const parsed = parseFloat(input.replace(',', '.'));
+  if (isNaN(parsed) || parsed < 0) {
+    window.alert('Monto inválido.');
+    return;
+  }
+  const { createClient } = await import('@supabase/supabase-js');
+  const sb = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  const { error } = await sb
+    .from('slots')
+    .update({ amount: parsed })
+    .eq('id', slot.id);
+  if (error) {
+    window.alert(`Error: ${error.message}`);
+    return;
+  }
+  await loadData();
+}}
                             style={secondaryButtonStyle}
                           >
                             {slot.amount != null ? `💵 $${slot.amount}` : 'Agregar monto'}
