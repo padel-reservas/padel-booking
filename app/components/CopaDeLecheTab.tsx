@@ -24,7 +24,7 @@ const GRUPOS = {
   F: [
     { p1: 'Gaby R', p2: 'Pupi' },
     { p1: 'German', p2: 'Dan' },
-    { p1: 'Ricky G', p2: 'Leo' },
+    { p1: 'Ricky G', p2: 'Mariano H' },
   ],
 };
 
@@ -36,8 +36,8 @@ const PARTIDOS_GRUPOS = {
   ],
   F: [
     { id: 'F1', p1: 'Gaby R / Pupi', p2: 'German / Dan' },
-    { id: 'F2', p1: 'Gaby R / Pupi', p2: 'Ricky G / Leo' },
-    { id: 'F3', p1: 'German / Dan', p2: 'Ricky G / Leo' },
+    { id: 'F2', p1: 'Gaby R / Pupi', p2: 'Ricky G / Mariano H' },
+    { id: 'F3', p1: 'German / Dan', p2: 'Ricky G / Mariano H' },
   ],
 };
 
