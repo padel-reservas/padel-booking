@@ -15,6 +15,22 @@ type Props = {
   adminUnlocked: boolean;
 };
 
+// IDs de jugadores en ranking_players
+const PLAYER_IDS: Record<string, number> = {
+  'Mati': 2,
+  'Mariano B': 8,
+  'Augusto': 30,
+  'Ale': 1,
+  'Dani O': 4,
+  'Javi': 20,
+  'Gaby R': 37,
+  'Pupi': 3,
+  'German': 26,
+  'Dan': 31,
+  'Ricky G': 28,
+  'Mariano H': 55,
+};
+
 const GRUPOS = {
   E: [
     { p1: 'Mati', p2: 'Mariano B' },
@@ -41,11 +57,9 @@ const PARTIDOS_GRUPOS = {
   ],
 };
 
-type Resultado = {
-  id: string;
-  partido_id: string;
-  sets: string;
-  ganador: string;
+type MatchResult = {
+  winner: string; // nombre de la pareja ganadora ej: 'Mati / Mariano B'
+  sets: string;   // ej: '6-3 / 7-5'
 };
 
 const groupColors: Record<string, { bg: string; border: string; text: string }> = {
@@ -57,31 +71,107 @@ function normalizeName(name: string) {
   return name.trim().toLowerCase();
 }
 
+function getPlayerIds(pareja: string): number[] {
+  return pareja.split(' / ').map(n => PLAYER_IDS[n.trim()]).filter(Boolean);
+}
+
+function formatSets(match: any): string {
+  const sets = [];
+  if (match.set1_a != null) sets.push(`${match.set1_a}-${match.set1_b}`);
+  if (match.set2_a != null) sets.push(`${match.set2_a}-${match.set2_b}`);
+  if (match.set3_a != null) sets.push(`${match.set3_a}-${match.set3_b}`);
+  return sets.join(' / ');
+}
+
+function getWinnerName(match: any, p1: string, p2: string): string {
+  const p1ids = getPlayerIds(p1);
+  const p2ids = getPlayerIds(p2);
+
+  const aPlayers = [match.team_a_player_1_id, match.team_a_player_2_id];
+  const bPlayers = [match.team_b_player_1_id, match.team_b_player_2_id];
+
+  const aIsP1 = p1ids.some(id => aPlayers.includes(id));
+
+  if (match.winner_team === 'A') return aIsP1 ? p1 : p2;
+  return aIsP1 ? p2 : p1;
+}
+
 export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
-  const [resultados, setResultados] = useState<Record<string, Resultado>>({});
+  const [matches, setMatches] = useState<any[]>([]);
+  const [resultados, setResultados] = useState<Record<string, MatchResult>>({});
   const [editando, setEditando] = useState<string | null>(null);
   const [form, setForm] = useState({ sets: '', ganador: '' });
   const [saving, setSaving] = useState(false);
 
+  // También leer de copa_leche_resultados para semis y final que se cargan manualmente
+  const [resultadosManuales, setResultadosManuales] = useState<Record<string, { sets: string; ganador: string }>>({});
+
   useEffect(() => {
+    // Cargar partidos de matches con source = 'slot' o 'torneo' que involucren jugadores de CL
+    const allIds = Object.values(PLAYER_IDS);
+
+    supabase
+      .from('matches')
+      .select('*')
+      .or(
+        allIds.map(id =>
+          `and(team_a_player_1_id.eq.${id},team_a_player_2_id.in.(${allIds.join(',')})),and(team_b_player_1_id.eq.${id},team_b_player_2_id.in.(${allIds.join(',')}))`
+        ).join(',')
+      )
+      .then(({ data }) => {
+        setMatches(data || []);
+      });
+
+    // Cargar resultados manuales de semis/final
     supabase.from('copa_leche_resultados').select('*').then(({ data }) => {
       if (!data) return;
-      const map: Record<string, Resultado> = {};
+      const map: Record<string, { sets: string; ganador: string }> = {};
       data.forEach((r: any) => { map[r.partido_id] = r; });
-      setResultados(map);
+      setResultadosManuales(map);
     });
   }, []);
 
-  const isMe = (nombre: string) => {
-    if (!myPlayerName) return false;
-    return nombre.split(' / ').some(n => normalizeName(n) === normalizeName(myPlayerName));
-  };
+  function findMatch(p1: string, p2: string): MatchResult | null {
+    const p1ids = getPlayerIds(p1);
+    const p2ids = getPlayerIds(p2);
+
+    const match = matches.find(m => {
+      const aPlayers = [m.team_a_player_1_id, m.team_a_player_2_id];
+      const bPlayers = [m.team_b_player_1_id, m.team_b_player_2_id];
+
+      const aIsP1 = p1ids.every(id => aPlayers.includes(id));
+      const bIsP2 = p2ids.every(id => bPlayers.includes(id));
+      const aIsP2 = p2ids.every(id => aPlayers.includes(id));
+      const bIsP1 = p1ids.every(id => bPlayers.includes(id));
+
+      return (aIsP1 && bIsP2) || (aIsP2 && bIsP1);
+    });
+
+    if (!match) return null;
+
+    return {
+      winner: getWinnerName(match, p1, p2),
+      sets: formatSets(match),
+    };
+  }
+
+  function calcularPosiciones(grupo: 'E' | 'F') {
+    const parejas = GRUPOS[grupo].map(p => `${p.p1} / ${p.p2}`);
+    const stats: Record<string, { pts: number }> = {};
+    parejas.forEach(p => { stats[p] = { pts: 0 }; });
+
+    PARTIDOS_GRUPOS[grupo].forEach(partido => {
+      const r = findMatch(partido.p1, partido.p2);
+      if (!r) return;
+      if (r.winner === partido.p1) stats[partido.p1].pts += 2;
+      else if (r.winner === partido.p2) stats[partido.p2].pts += 2;
+    });
+
+    return parejas.sort((a, b) => stats[b].pts - stats[a].pts).map(p => ({ nombre: p, pts: stats[p].pts }));
+  }
 
   async function handleSaveResultado(partidoId: string) {
-    if (!form.sets || !form.ganador) {
-      alert('Completá sets y ganador.');
-      return;
-    }
+    if (!form.sets || !form.ganador) { alert('Completá sets y ganador.'); return; }
     setSaving(true);
 
     const { error } = await supabase
@@ -92,28 +182,13 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
     setSaving(false);
     if (error) { alert(`Error: ${error.message}`); return; }
 
-    setResultados(prev => ({ ...prev, [partidoId]: { id: partidoId, partido_id: partidoId, sets: form.sets, ganador: form.ganador } }));
+    setResultadosManuales(prev => ({ ...prev, [partidoId]: { sets: form.sets, ganador: form.ganador } }));
     setEditando(null);
     setForm({ sets: '', ganador: '' });
   }
 
-  function calcularPosiciones(grupo: 'E' | 'F') {
-    const parejas = GRUPOS[grupo].map(p => `${p.p1} / ${p.p2}`);
-    const stats: Record<string, { pts: number }> = {};
-    parejas.forEach(p => { stats[p] = { pts: 0 }; });
-
-    PARTIDOS_GRUPOS[grupo].forEach(partido => {
-      const r = resultados[partido.id];
-      if (!r) return;
-      if (r.ganador === partido.p1) stats[partido.p1].pts += 2;
-      else if (r.ganador === partido.p2) stats[partido.p2].pts += 2;
-    });
-
-    return parejas.sort((a, b) => stats[b].pts - stats[a].pts).map(p => ({ nombre: p, pts: stats[p].pts }));
-  }
-
   function renderPartidoForm(partidoId: string, p1: string, p2: string) {
-    const r = resultados[partidoId];
+    const r = resultadosManuales[partidoId];
     if (!adminUnlocked) return null;
     return (
       <div style={{ marginTop: 10 }}>
@@ -149,11 +224,16 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
     );
   }
 
+  const isMe = (nombre: string) => {
+    if (!myPlayerName) return false;
+    return nombre.split(' / ').some(n => normalizeName(n) === normalizeName(myPlayerName));
+  };
+
   const posE = calcularPosiciones('E');
   const posF = calcularPosiciones('F');
 
-  const grupoECompleto = PARTIDOS_GRUPOS['E'].every(p => resultados[p.id]);
-  const grupoFCompleto = PARTIDOS_GRUPOS['F'].every(p => resultados[p.id]);
+  const grupoECompleto = PARTIDOS_GRUPOS['E'].every(p => findMatch(p.p1, p.p2) !== null);
+  const grupoFCompleto = PARTIDOS_GRUPOS['F'].every(p => findMatch(p.p1, p.p2) !== null);
   const ambosGruposCompletos = grupoECompleto && grupoFCompleto;
 
   const sf1p1 = posE[0]?.nombre || '1ro Grupo E';
@@ -161,7 +241,7 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
   const sf2p1 = posF[0]?.nombre || '1ro Grupo F';
   const sf2p2 = posE[1]?.nombre || '2do Grupo E';
 
-  const semisCompletas = resultados['SF1R'] && resultados['SF2R'];
+  const semisCompletas = resultadosManuales['SF1R'] && resultadosManuales['SF2R'];
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -224,7 +304,7 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
               <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 8 }}>PARTIDOS</div>
               <div style={{ display: 'grid', gap: 8 }}>
                 {PARTIDOS_GRUPOS[grupo].map(partido => {
-                  const r = resultados[partido.id];
+                  const r = findMatch(partido.p1, partido.p2);
                   const mio = isMe(partido.p1) || isMe(partido.p2);
                   return (
                     <div key={partido.id} style={{
@@ -239,13 +319,12 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
                         {r ? (
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <span style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>{r.sets}</span>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 8px' }}>{r.ganador}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 8px' }}>{r.winner}</span>
                           </div>
                         ) : (
                           <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 700, background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 999, padding: '2px 8px' }}>Pendiente</span>
                         )}
                       </div>
-                      {renderPartidoForm(partido.id, partido.p1, partido.p2)}
                     </div>
                   );
                 })}
@@ -255,7 +334,7 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
         );
       })}
 
-      {/* Semis — solo cuando ambos grupos estén completos */}
+      {/* Semis */}
       {ambosGruposCompletos && (
         <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
           <h3 style={{ marginTop: 0, marginBottom: 12 }}>Semifinales</h3>
@@ -264,7 +343,7 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
               { id: 'SF1R', label: 'SF1', p1: sf1p1, p2: sf1p2 },
               { id: 'SF2R', label: 'SF2', p1: sf2p1, p2: sf2p2 },
             ].map(sf => {
-              const r = resultados[sf.id];
+              const r = resultadosManuales[sf.id];
               return (
                 <div key={sf.id} style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6 }}>{sf.label}</div>
@@ -287,27 +366,27 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
         </div>
       )}
 
-      {/* Final — solo cuando ambas semis estén jugadas */}
+      {/* Final */}
       {semisCompletas && (
         <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
           <h3 style={{ marginTop: 0, marginBottom: 12 }}>Final 🏆</h3>
           <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>
-                {resultados['SF1R']?.ganador || 'Ganador SF1'}
+                {resultadosManuales['SF1R']?.ganador || 'Ganador SF1'}
                 <span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>
-                {resultados['SF2R']?.ganador || 'Ganador SF2'}
+                {resultadosManuales['SF2R']?.ganador || 'Ganador SF2'}
               </div>
-              {resultados['FINAL'] && (
+              {resultadosManuales['FINAL'] && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>{resultados['FINAL'].sets}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#713f12', background: '#fefce8', border: '1px solid #fde047', borderRadius: 999, padding: '2px 8px' }}>🏆 {resultados['FINAL'].ganador}</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>{resultadosManuales['FINAL'].sets}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#713f12', background: '#fefce8', border: '1px solid #fde047', borderRadius: 999, padding: '2px 8px' }}>🏆 {resultadosManuales['FINAL'].ganador}</span>
                 </div>
               )}
             </div>
             {renderPartidoForm('FINAL',
-              resultados['SF1R']?.ganador || 'Ganador SF1',
-              resultados['SF2R']?.ganador || 'Ganador SF2'
+              resultadosManuales['SF1R']?.ganador || 'Ganador SF1',
+              resultadosManuales['SF2R']?.ganador || 'Ganador SF2'
             )}
           </div>
         </div>
