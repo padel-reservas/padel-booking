@@ -15,7 +15,6 @@ type Props = {
   adminUnlocked: boolean;
 };
 
-// IDs de jugadores en ranking_players
 const PLAYER_IDS: Record<string, number> = {
   'Mati': 2,
   'Mariano B': 8,
@@ -29,6 +28,16 @@ const PLAYER_IDS: Record<string, number> = {
   'Dan': 31,
   'Ricky G': 28,
   'Mariano H': 55,
+  'Jonas': 19,
+  'Seba Z': 29,
+  'Sergio': 14,
+  'Facu': 25,
+  'Mariano L': 9,
+  'Fran S': 33,
+  'Martin PI': 36,
+  'Gaston R': 38,
+  'Hernan L': 11,
+  'Daniel S': 44,
 };
 
 const GRUPOS = {
@@ -58,8 +67,8 @@ const PARTIDOS_GRUPOS = {
 };
 
 type MatchResult = {
-  winner: string; // nombre de la pareja ganadora ej: 'Mati / Mariano B'
-  sets: string;   // ej: '6-3 / 7-5'
+  winner: string;
+  sets: string;
 };
 
 const groupColors: Record<string, { bg: string; border: string; text: string }> = {
@@ -85,44 +94,34 @@ function formatSets(match: any): string {
 
 function getWinnerName(match: any, p1: string, p2: string): string {
   const p1ids = getPlayerIds(p1);
-  const p2ids = getPlayerIds(p2);
-
   const aPlayers = [match.team_a_player_1_id, match.team_a_player_2_id];
-  const bPlayers = [match.team_b_player_1_id, match.team_b_player_2_id];
-
   const aIsP1 = p1ids.some(id => aPlayers.includes(id));
-
   if (match.winner_team === 'A') return aIsP1 ? p1 : p2;
   return aIsP1 ? p2 : p1;
 }
 
 export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
   const [matches, setMatches] = useState<any[]>([]);
-  const [resultados, setResultados] = useState<Record<string, MatchResult>>({});
+  const [resultadosManuales, setResultadosManuales] = useState<Record<string, { sets: string; ganador: string }>>({});
   const [editando, setEditando] = useState<string | null>(null);
   const [form, setForm] = useState({ sets: '', ganador: '' });
   const [saving, setSaving] = useState(false);
 
-  // También leer de copa_leche_resultados para semis y final que se cargan manualmente
-  const [resultadosManuales, setResultadosManuales] = useState<Record<string, { sets: string; ganador: string }>>({});
-
   useEffect(() => {
-    // Cargar partidos de matches con source = 'slot' o 'torneo' que involucren jugadores de CL
     const allIds = Object.values(PLAYER_IDS);
 
     supabase
       .from('matches')
       .select('*')
-      .or(
-        allIds.map(id =>
-          `and(team_a_player_1_id.eq.${id},team_a_player_2_id.in.(${allIds.join(',')})),and(team_b_player_1_id.eq.${id},team_b_player_2_id.in.(${allIds.join(',')}))`
-        ).join(',')
-      )
       .then(({ data }) => {
-        setMatches(data || []);
+        if (!data) return;
+        const filtered = data.filter(m => {
+          const players = [m.team_a_player_1_id, m.team_a_player_2_id, m.team_b_player_1_id, m.team_b_player_2_id];
+          return players.every(id => allIds.includes(id));
+        });
+        setMatches(filtered);
       });
 
-    // Cargar resultados manuales de semis/final
     supabase.from('copa_leche_resultados').select('*').then(({ data }) => {
       if (!data) return;
       const map: Record<string, { sets: string; ganador: string }> = {};
@@ -138,21 +137,15 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
     const match = matches.find(m => {
       const aPlayers = [m.team_a_player_1_id, m.team_a_player_2_id];
       const bPlayers = [m.team_b_player_1_id, m.team_b_player_2_id];
-
       const aIsP1 = p1ids.every(id => aPlayers.includes(id));
       const bIsP2 = p2ids.every(id => bPlayers.includes(id));
       const aIsP2 = p2ids.every(id => aPlayers.includes(id));
       const bIsP1 = p1ids.every(id => bPlayers.includes(id));
-
       return (aIsP1 && bIsP2) || (aIsP2 && bIsP1);
     });
 
     if (!match) return null;
-
-    return {
-      winner: getWinnerName(match, p1, p2),
-      sets: formatSets(match),
-    };
+    return { winner: getWinnerName(match, p1, p2), sets: formatSets(match) };
   }
 
   function calcularPosiciones(grupo: 'E' | 'F') {
@@ -242,6 +235,31 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
   const sf2p2 = posE[1]?.nombre || '2do Grupo E';
 
   const semisCompletas = resultadosManuales['SF1R'] && resultadosManuales['SF2R'];
+  const finalCLCompleta = resultadosManuales['FINAL'];
+
+  // Repechaje
+  const repSF1p1 = 'Sergio / Facu';
+  const repSF1p2 = 'Jonas / Seba Z';
+  const repSF2p1 = 'Mariano L / Fran S';
+  const repSF2p2 = resultadosManuales['REP_SF2_RIVAL']?.ganador || 'Perdedor QF2';
+
+  const repSF1Completa = resultadosManuales['REP_SF1'];
+  const repSF2Completa = resultadosManuales['REP_SF2'];
+  const repFinalCompleta = resultadosManuales['REP_FINAL'];
+
+  const superFinalP1 = finalCLCompleta?.ganador || 'Campeón CL';
+  const superFinalP2 = repFinalCompleta?.ganador || 'Campeón Repechaje';
+  const superFinalCompleta = repFinalCompleta && finalCLCompleta;
+
+  function renderResultado(r: { sets: string; ganador: string } | undefined) {
+    if (!r) return null;
+    return (
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>{r.sets}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 8px' }}>{r.ganador}</span>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -250,7 +268,7 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
       <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
         <h2 style={{ marginTop: 0, marginBottom: 4 }}>🥛 Copa de Leche</h2>
         <p style={{ color: '#64748b', marginBottom: 0 }}>
-          2 grupos de 3 · Top 2 avanzan a semis · Final sin 3er puesto
+          2 grupos de 3 · Top 2 avanzan a semis · Ganador CL juega Super Final vs Ganador Repechaje
         </p>
       </div>
 
@@ -274,7 +292,6 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
               )}
             </h3>
 
-            {/* Posiciones */}
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 8 }}>POSICIONES</div>
               <div style={{ display: 'grid', gap: 6 }}>
@@ -299,7 +316,6 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
               </div>
             </div>
 
-            {/* Partidos */}
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 8 }}>PARTIDOS</div>
               <div style={{ display: 'grid', gap: 8 }}>
@@ -334,10 +350,10 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
         );
       })}
 
-      {/* Semis */}
+      {/* Semis CL */}
       {ambosGruposCompletos && (
         <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 12 }}>Semifinales</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 12 }}>Semifinales Copa de Leche</h3>
           <div style={{ display: 'grid', gap: 8 }}>
             {[
               { id: 'SF1R', label: 'SF1', p1: sf1p1, p2: sf1p2 },
@@ -351,12 +367,7 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
                     <div style={{ fontSize: 13, fontWeight: 600 }}>
                       {sf.p1}<span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>{sf.p2}
                     </div>
-                    {r && (
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>{r.sets}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '2px 8px' }}>{r.ganador}</span>
-                      </div>
-                    )}
+                    {renderResultado(r)}
                   </div>
                   {renderPartidoForm(sf.id, sf.p1, sf.p2)}
                 </div>
@@ -366,10 +377,10 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
         </div>
       )}
 
-      {/* Final */}
+      {/* Final CL */}
       {semisCompletas && (
         <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 12 }}>Final 🏆</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 12 }}>Final Copa de Leche 🥛</h3>
           <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>
@@ -377,17 +388,98 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
                 <span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>
                 {resultadosManuales['SF2R']?.ganador || 'Ganador SF2'}
               </div>
-              {resultadosManuales['FINAL'] && (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#166534' }}>{resultadosManuales['FINAL'].sets}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#713f12', background: '#fefce8', border: '1px solid #fde047', borderRadius: 999, padding: '2px 8px' }}>🏆 {resultadosManuales['FINAL'].ganador}</span>
-                </div>
-              )}
+              {renderResultado(resultadosManuales['FINAL'])}
             </div>
             {renderPartidoForm('FINAL',
               resultadosManuales['SF1R']?.ganador || 'Ganador SF1',
               resultadosManuales['SF2R']?.ganador || 'Ganador SF2'
             )}
+          </div>
+        </div>
+      )}
+
+      {/* REPECHAJE */}
+      <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '2px solid #111827' }}>
+        <h3 style={{ marginTop: 0, marginBottom: 12, color: '#111827', fontWeight: 900 }}>REPECHAJE</h3>
+
+        <div style={{ display: 'grid', gap: 8, marginBottom: 8 }}>
+          {/* SF Repechaje 1 */}
+          <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6 }}>Semi Repechaje 1</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                {repSF1p1}<span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>{repSF1p2}
+              </div>
+              {renderResultado(repSF1Completa)}
+            </div>
+            {renderPartidoForm('REP_SF1', repSF1p1, repSF1p2)}
+          </div>
+
+          {/* SF Repechaje 2 */}
+          <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6 }}>Semi Repechaje 2</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                {repSF2p1}<span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>{repSF2p2}
+              </div>
+              {renderResultado(repSF2Completa)}
+            </div>
+            {/* Selector para el rival pendiente de Mariano L/Fran S */}
+            {adminUnlocked && !resultadosManuales['REP_SF2_RIVAL'] && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>¿Quién perdió QF2?</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {['Martin PI / Gaston R', 'Hernan L / Daniel S'].map(rival => (
+                    <button key={rival} onClick={async () => {
+                      await supabase.from('copa_leche_resultados').upsert(
+                        { partido_id: 'REP_SF2_RIVAL', sets: '-', ganador: rival },
+                        { onConflict: 'partido_id' }
+                      );
+                      setResultadosManuales(prev => ({ ...prev, 'REP_SF2_RIVAL': { sets: '-', ganador: rival } }));
+                    }}
+                      style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                      {rival}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {resultadosManuales['REP_SF2_RIVAL'] && renderPartidoForm('REP_SF2', repSF2p1, repSF2p2)}
+          </div>
+        </div>
+
+        {/* Final Repechaje */}
+        {repSF1Completa && repSF2Completa && (
+          <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f1f5f9', border: '1px solid #cbd5e1', marginTop: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6 }}>Final Repechaje</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                {repSF1Completa.ganador}<span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>{repSF2Completa.ganador}
+              </div>
+              {renderResultado(repFinalCompleta)}
+            </div>
+            {renderPartidoForm('REP_FINAL', repSF1Completa.ganador, repSF2Completa.ganador)}
+          </div>
+        )}
+      </div>
+
+      {/* Super Final */}
+      {superFinalCompleta && (
+        <div style={{ background: '#111827', borderRadius: 20, padding: 20, border: '2px solid #111827' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 12, color: 'white', fontWeight: 900 }}>⚡ SUPER FINAL</h3>
+          <div style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>
+                {superFinalP1}<span style={{ color: '#9ca3af', margin: '0 6px' }}>vs</span>{superFinalP2}
+              </div>
+              {resultadosManuales['SUPER_FINAL'] && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#fde047' }}>{resultadosManuales['SUPER_FINAL'].sets}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#111827', background: '#fde047', border: '1px solid #fde047', borderRadius: 999, padding: '2px 8px' }}>🏆 {resultadosManuales['SUPER_FINAL'].ganador}</span>
+                </div>
+              )}
+            </div>
+            {renderPartidoForm('SUPER_FINAL', superFinalP1, superFinalP2)}
           </div>
         </div>
       )}
