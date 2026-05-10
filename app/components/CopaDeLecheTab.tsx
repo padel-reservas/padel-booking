@@ -229,10 +229,10 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
   const grupoFCompleto = PARTIDOS_GRUPOS['F'].every(p => findMatch(p.p1, p.p2) !== null);
   const ambosGruposCompletos = grupoECompleto && grupoFCompleto;
 
-  const sf1p1 = posE[0]?.nombre || '1ro Grupo E';
-  const sf1p2 = posF[1]?.nombre || '2do Grupo F';
-  const sf2p1 = posF[0]?.nombre || '1ro Grupo F';
-  const sf2p2 = posE[1]?.nombre || '2do Grupo E';
+ const sf1p1 = posE[0]?.nombre || 'Augusto / Ale';
+const sf1p2 = posF[1]?.nombre || '2do Grupo F';
+const sf2p1 = 'Gaby R / Pupi';
+const sf2p2 = 'Mati / Mariano B';
 
   const semisCompletas = resultadosManuales['SF1R'] && resultadosManuales['SF2R'];
   const finalCLCompleta = resultadosManuales['FINAL'];
@@ -351,10 +351,9 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
       })}
 
       {/* Semis CL */}
-      {ambosGruposCompletos && (
-        <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 12 }}>Semifinales Copa de Leche</h3>
-          <div style={{ display: 'grid', gap: 8 }}>
+      {(ambosGruposCompletos || true) && (
+  <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
+    <h3 style={{ marginTop: 0, marginBottom: 12 }}>Semifinales Copa de Leche</h3>    <div style={{ display: 'grid', gap: 8 }}>
             {[
               { id: 'SF1R', label: 'SF1', p1: sf1p1, p2: sf1p2 },
               { id: 'SF2R', label: 'SF2', p1: sf2p1, p2: sf2p2 },
