@@ -230,7 +230,7 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
   const ambosGruposCompletos = grupoECompleto && grupoFCompleto;
 
  const sf1p1 = posE[0]?.nombre || 'Augusto / Ale';
-const sf1p2 = posF[1]?.nombre || '2do Grupo F';
+const sf1p2 = grupoFCompleto ? posF[1]?.nombre : '2do Grupo F';
 const sf2p1 = 'Gaby R / Pupi';
 const sf2p2 = 'Mati / Mariano B';
 
