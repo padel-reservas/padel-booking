@@ -424,26 +424,7 @@ const sf2p2 = 'Mati / Mariano B';
               {renderResultado(repSF2Completa)}
             </div>
             {/* Selector para el rival pendiente de Mariano L/Fran S */}
-            {adminUnlocked && !resultadosManuales['REP_SF2_RIVAL'] && (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>¿Quién perdió QF2?</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {['Martin PI / Gaston R', 'Hernan L / Daniel S'].map(rival => (
-                    <button key={rival} onClick={async () => {
-                      await supabase.from('copa_leche_resultados').upsert(
-                        { partido_id: 'REP_SF2_RIVAL', sets: '-', ganador: rival },
-                        { onConflict: 'partido_id' }
-                      );
-                      setResultadosManuales(prev => ({ ...prev, 'REP_SF2_RIVAL': { sets: '-', ganador: rival } }));
-                    }}
-                      style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
-                      {rival}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {resultadosManuales['REP_SF2_RIVAL'] && renderPartidoForm('REP_SF2', repSF2p1, repSF2p2)}
+            {renderPartidoForm('REP_SF2', repSF2p1, repSF2p2)}
           </div>
         </div>
 
