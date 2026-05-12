@@ -788,7 +788,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
               <div style={{ display: 'flex', flexDirection: 'column', width: 150, paddingTop: 192 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#b45309', marginBottom: 8 }}>FINAL</div>
                 <div style={matchBoxStyle}>
-                  <div style={{ ...tbdStyle, borderBottom: '1px solid #e5e7eb' }}>Ganador SF1</div>
+                 <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>Guille E / Adrian</div>
                   <div style={{ ...tbdStyle, borderBottom: 'none' }}>Ganador SF2</div>
                 </div>
                 <div style={{ textAlign: 'center', fontSize: 11, color: '#b45309', fontWeight: 700, marginTop: 6 }}>Campeón</div>
