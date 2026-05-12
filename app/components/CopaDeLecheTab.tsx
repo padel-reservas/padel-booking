@@ -229,8 +229,8 @@ export default function CopaDeLecheTab({ myPlayerName, adminUnlocked }: Props) {
   const grupoFCompleto = PARTIDOS_GRUPOS['F'].every(p => findMatch(p.p1, p.p2) !== null);
   const ambosGruposCompletos = grupoECompleto && grupoFCompleto;
 
- const sf1p1 = posE[0]?.nombre || 'Augusto / Ale';
-const sf1p2 = grupoFCompleto ? posF[1]?.nombre : '2do Grupo F';
+ const sf1p1 = 'Augusto / Ale';
+const sf1p2 = 'German / Dan';
 const sf2p1 = 'Gaby R / Pupi';
 const sf2p2 = 'Mati / Mariano B';
 
@@ -241,7 +241,7 @@ const sf2p2 = 'Mati / Mariano B';
   const repSF1p1 = 'Sergio / Facu';
   const repSF1p2 = 'Jonas / Seba Z';
   const repSF2p1 = 'Mariano L / Fran S';
-  const repSF2p2 = resultadosManuales['REP_SF2_RIVAL']?.ganador || 'Perdedor QF2';
+  const repSF2p2 = 'Hernan L / Daniel S';
 
   const repSF1Completa = resultadosManuales['REP_SF1'];
   const repSF2Completa = resultadosManuales['REP_SF2'];
