@@ -241,7 +241,7 @@ const sf2p2 = 'Mati / Mariano B';
   const repSF1p1 = 'Sergio / Facu';
   const repSF1p2 = 'Jonas / Seba Z';
   const repSF2p1 = 'Mariano L / Fran S';
-  const repSF2p2 = 'Hernan L / Daniel S';
+  const repSF2p2 = 'Dani O / Daniel S';
 
   const repSF1Completa = resultadosManuales['REP_SF1'];
   const repSF2Completa = resultadosManuales['REP_SF2'];
