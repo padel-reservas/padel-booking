@@ -148,6 +148,7 @@ export async function POST(req: Request) {
         QF: 2.0,
         SF: 2.5,
         F: 3.0,
+        FIN: 3.0,
         TP: 2.0,
         A: 1.5,
         B: 1.5,
