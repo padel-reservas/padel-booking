@@ -2286,6 +2286,7 @@ export default function Page() {
             width: 280,
             height: 200,
             objectFit: 'cover',
+            objectPosition: 'top',
             borderRadius: 16,
             marginBottom: 16,
             border: '3px solid #fde047',
