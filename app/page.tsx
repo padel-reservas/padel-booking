@@ -2200,106 +2200,104 @@ export default function Page() {
 
   return (
     <>
-      {showCelebration && !celebrationDone && (
-        <>
-          <style>{`
-            @keyframes fall {
-              0% { transform: translateY(-60px) rotate(0deg); opacity: 1; }
-              100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
-            }
-            @keyframes bounce {
-              0%, 100% { transform: translateY(0) scale(1); }
-              50% { transform: translateY(-20px) scale(1.1); }
-            }
-            @keyframes fadeIn {
-              from { opacity: 0; transform: scale(0.8); }
-              to { opacity: 1; transform: scale(1); }
-            }
-          `}</style>
-          <div
-           onClick={() => {
-  // Fanfarria con Web Audio API
-  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-  const notas = [
-    { freq: 523, start: 0, dur: 0.15 },
-    { freq: 659, start: 0.15, dur: 0.15 },
-    { freq: 784, start: 0.3, dur: 0.15 },
-    { freq: 1047, start: 0.45, dur: 0.5 },
-    { freq: 784, start: 0.95, dur: 0.15 },
-    { freq: 1047, start: 1.1, dur: 0.8 },
-  ];
-  notas.forEach(({ freq, start, dur }) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sawtooth';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.3, ctx.currentTime + start);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-    osc.start(ctx.currentTime + start);
-    osc.stop(ctx.currentTime + start + dur);
-  });
-  setTimeout(() => setCelebrationDone(true), 2000);
-}}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 9999,
-              background: 'rgba(0,0,0,0.88)',
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', padding: 24,
-            }}
-          >
-            {Array.from({ length: 30 }).map((_, i) => {
-              const emojis = ['⭐', '🌟', '✨', '🎾', '🏆', '🎊', '🎉'];
-              const emoji = emojis[i % emojis.length];
-              const left = (i * 37) % 100;
-              const delay = (i * 0.3) % 4;
-              const duration = 2.5 + (i * 0.2) % 2;
-              return (
-                <div key={i} style={{
-                  position: 'absolute', left: `${left}%`, top: 0,
-                  fontSize: 20 + (i % 3) * 8,
-                  animation: `fall ${duration}s linear ${delay}s infinite`,
-                  pointerEvents: 'none',
-                }}>
-                  {emoji}
-                </div>
-              );
-            })}
-            <div style={{ animation: 'fadeIn 0.5s ease-out', textAlign: 'center', zIndex: 1 }}>
-              <div style={{ fontSize: 72, marginBottom: 16, animation: 'bounce 1.2s ease-in-out infinite' }}>🏆</div>
-              <div style={{ fontSize: 26, fontWeight: 900, color: 'white', marginBottom: 10, lineHeight: 1.2 }}>
-                Congrats Guille & Adrian!
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#fde047', marginBottom: 8 }}>
-                Greenwich Open 1st Edition
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: '#fde047', marginBottom: 32 }}>
-                🎾 Champions!! 🎾
-              </div>
-              <Image
-<Image
-  src={fotoFinalistas}
-  alt="Campeones Greenwich Open"
-  width={280}
-  height={200}
-  style={{
-    width: 280,
-    height: 200,
-    objectFit: 'cover',
-    borderRadius: 16,
-    marginBottom: 16,
-    border: '3px solid #fde047',
-    flexShrink: 0,
-  }}
-/><div style={{ fontSize: 12, color: '#6b7280', background: 'rgba(255,255,255,0.1)', borderRadius: 999, padding: '6px 16px' }}>
-  Tap para cerrar
-</div>
-            </div>
+     {showCelebration && !celebrationDone && (
+  <>
+    <style>{`
+      @keyframes fall {
+        0% { transform: translateY(-60px) rotate(0deg); opacity: 1; }
+        100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+      }
+      @keyframes bounce {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-20px) scale(1.1); }
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.8); }
+        to { opacity: 1; transform: scale(1); }
+      }
+    `}</style>
+    <div
+      onClick={() => {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const notas = [
+          { freq: 523, start: 0, dur: 0.15 },
+          { freq: 659, start: 0.15, dur: 0.15 },
+          { freq: 784, start: 0.3, dur: 0.15 },
+          { freq: 1047, start: 0.45, dur: 0.5 },
+          { freq: 784, start: 0.95, dur: 0.15 },
+          { freq: 1047, start: 1.1, dur: 0.8 },
+        ];
+        notas.forEach(({ freq, start, dur }) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sawtooth';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.3, ctx.currentTime + start);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+          osc.start(ctx.currentTime + start);
+          osc.stop(ctx.currentTime + start + dur);
+        });
+        setTimeout(() => setCelebrationDone(true), 2000);
+      }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.88)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', padding: 24,
+      }}
+    >
+      {Array.from({ length: 30 }).map((_, i) => {
+        const emojis = ['⭐', '🌟', '✨', '🎾', '🏆', '🎊', '🎉'];
+        const emoji = emojis[i % emojis.length];
+        const left = (i * 37) % 100;
+        const delay = (i * 0.3) % 4;
+        const duration = 2.5 + (i * 0.2) % 2;
+        return (
+          <div key={i} style={{
+            position: 'absolute', left: `${left}%`, top: 0,
+            fontSize: 20 + (i % 3) * 8,
+            animation: `fall ${duration}s linear ${delay}s infinite`,
+            pointerEvents: 'none',
+          }}>
+            {emoji}
           </div>
-        </>
-      )}
+        );
+      })}
+      <div style={{ animation: 'fadeIn 0.5s ease-out', textAlign: 'center', zIndex: 1 }}>
+        <div style={{ fontSize: 72, marginBottom: 16, animation: 'bounce 1.2s ease-in-out infinite' }}>🏆</div>
+        <div style={{ fontSize: 26, fontWeight: 900, color: 'white', marginBottom: 10, lineHeight: 1.2 }}>
+          Congrats Guille & Adrian!
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#fde047', marginBottom: 8 }}>
+          Greenwich Open 1st Edition
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#fde047', marginBottom: 16 }}>
+          🎾 Champions!! 🎾
+        </div>
+        <Image
+          src={fotoFinalistas}
+          alt="Campeones Greenwich Open"
+          width={280}
+          height={200}
+          style={{
+            width: 280,
+            height: 200,
+            objectFit: 'cover',
+            borderRadius: 16,
+            marginBottom: 16,
+            border: '3px solid #fde047',
+          }}
+        />
+        <div style={{ fontSize: 12, color: '#6b7280', background: 'rgba(255,255,255,0.1)', borderRadius: 999, padding: '6px 16px' }}>
+          Tap para cerrar
+        </div>
+      </div>
+    </div>
+  </>
+)}
       <div
         style={{
           padding: 16,
