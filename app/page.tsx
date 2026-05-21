@@ -2279,17 +2279,21 @@ export default function Page() {
                 🎾 Champions!! 🎾
               </div>
               <Image
-src={fotoFinalistas}
+<Image
+  src={fotoFinalistas}
   alt="Campeones Greenwich Open"
+  width={280}
+  height={200}
   style={{
-    width: '100%',
-    maxWidth: 320,
+    width: 280,
+    height: 200,
+    objectFit: 'cover',
     borderRadius: 16,
     marginBottom: 16,
     border: '3px solid #fde047',
+    flexShrink: 0,
   }}
-/>
-<div style={{ fontSize: 12, color: '#6b7280', background: 'rgba(255,255,255,0.1)', borderRadius: 999, padding: '6px 16px' }}>
+/><div style={{ fontSize: 12, color: '#6b7280', background: 'rgba(255,255,255,0.1)', borderRadius: 999, padding: '6px 16px' }}>
   Tap para cerrar
 </div>
             </div>
