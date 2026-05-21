@@ -249,10 +249,10 @@ export default function Page() {
   const [savingAlternativeFor, setSavingAlternativeFor] = useState<number | null>(null);
   const [creatingSlotFromAlternativeId, setCreatingSlotFromAlternativeId] = useState<number | null>(
     null
-    const CELEBRATION_UNTIL = new Date('2026-05-27');
-const showCelebration = new Date() < CELEBRATION_UNTIL;
-const [celebrationDone, setCelebrationDone] = useState(false);
   );
+  const CELEBRATION_UNTIL = new Date('2026-05-27');
+  const showCelebration = new Date() < CELEBRATION_UNTIL;
+  const [celebrationDone, setCelebrationDone] = useState(false);
 
   const canSeeAdmin = useMemo(() => {
     if (typeof window === 'undefined') return false;
