@@ -791,7 +791,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
                  <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>Guille E / Adrian</div>
                   <div style={{ ...teamStyle, borderBottom: 'none' }}>Vicente / Eze</div>
                 </div>
-                <div style={{ textAlign: 'center', fontSize: 11, color: '#b45309', fontWeight: 700, marginTop: 6 }}>Campeón</div>
+                <div style={{ textAlign: 'center', fontSize: 11, color: '#b45309', fontWeight: 700, marginTop: 6 }}>🏆 Guille E / Adrian</div>
               </div>
 
             </div>
