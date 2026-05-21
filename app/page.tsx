@@ -2278,7 +2278,7 @@ export default function Page() {
               <div style={{ fontSize: 18, fontWeight: 900, color: '#fde047', marginBottom: 32 }}>
                 🎾 Champions!! 🎾
               </div>
-              <img
+              <Image
 src={fotoFinalistas}
   alt="Campeones Greenwich Open"
   style={{
