@@ -2215,7 +2215,31 @@ export default function Page() {
             }
           `}</style>
           <div
-            onClick={() => setCelebrationDone(true)}
+           onClick={() => {
+  // Fanfarria con Web Audio API
+  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const notas = [
+    { freq: 523, start: 0, dur: 0.15 },
+    { freq: 659, start: 0.15, dur: 0.15 },
+    { freq: 784, start: 0.3, dur: 0.15 },
+    { freq: 1047, start: 0.45, dur: 0.5 },
+    { freq: 784, start: 0.95, dur: 0.15 },
+    { freq: 1047, start: 1.1, dur: 0.8 },
+  ];
+  notas.forEach(({ freq, start, dur }) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sawtooth';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.3, ctx.currentTime + start);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+    osc.start(ctx.currentTime + start);
+    osc.stop(ctx.currentTime + start + dur);
+  });
+  setTimeout(() => setCelebrationDone(true), 2000);
+}}
             style={{
               position: 'fixed', inset: 0, zIndex: 9999,
               background: 'rgba(0,0,0,0.88)',
