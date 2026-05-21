@@ -18,7 +18,7 @@ import TorneoTab from './components/TorneoTab';
 import ApuestasTab from './components/ApuestasTab';
 import AsadoTab from './components/AsadoTab';
 import CopaDeLecheTab from './components/CopaDeLecheTab';
-import fotoFinalistas from './foto-finalistas.jpg';
+
 
 import type {
   ActivityMatch,
@@ -2278,7 +2278,7 @@ export default function Page() {
                 🎾 Champions!! 🎾
               </div>
               <img
- src={fotoFinalistas}
+ src="/foto-finalistas.jpg"
   alt="Campeones Greenwich Open"
   style={{
     width: '100%',
