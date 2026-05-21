@@ -249,6 +249,9 @@ export default function Page() {
   const [savingAlternativeFor, setSavingAlternativeFor] = useState<number | null>(null);
   const [creatingSlotFromAlternativeId, setCreatingSlotFromAlternativeId] = useState<number | null>(
     null
+    const CELEBRATION_UNTIL = new Date('2026-05-27');
+const showCelebration = new Date() < CELEBRATION_UNTIL;
+const [celebrationDone, setCelebrationDone] = useState(false);
   );
 
   const canSeeAdmin = useMemo(() => {
@@ -2194,17 +2197,79 @@ export default function Page() {
   const manualPlayerOptions = [...rankingPlayers].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div
-      style={{
-        padding: 16,
-        fontFamily: 'Arial, sans-serif',
-        maxWidth: 1080,
-        margin: '0 auto',
-        background: '#f8fafc',
-        minHeight: '100vh',
-      }}
-    >
-      {showVersionBanner && dismissedVersion !== APP_VERSION && (
+    <>
+      {showCelebration && !celebrationDone && (
+        <>
+          <style>{`
+            @keyframes fall {
+              0% { transform: translateY(-60px) rotate(0deg); opacity: 1; }
+              100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+            }
+            @keyframes bounce {
+              0%, 100% { transform: translateY(0) scale(1); }
+              50% { transform: translateY(-20px) scale(1.1); }
+            }
+            @keyframes fadeIn {
+              from { opacity: 0; transform: scale(0.8); }
+              to { opacity: 1; transform: scale(1); }
+            }
+          `}</style>
+          <div
+            onClick={() => setCelebrationDone(true)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 9999,
+              background: 'rgba(0,0,0,0.88)',
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', padding: 24,
+            }}
+          >
+            {Array.from({ length: 30 }).map((_, i) => {
+              const emojis = ['⭐', '🌟', '✨', '🎾', '🏆', '🎊', '🎉'];
+              const emoji = emojis[i % emojis.length];
+              const left = (i * 37) % 100;
+              const delay = (i * 0.3) % 4;
+              const duration = 2.5 + (i * 0.2) % 2;
+              return (
+                <div key={i} style={{
+                  position: 'absolute', left: `${left}%`, top: 0,
+                  fontSize: 20 + (i % 3) * 8,
+                  animation: `fall ${duration}s linear ${delay}s infinite`,
+                  pointerEvents: 'none',
+                }}>
+                  {emoji}
+                </div>
+              );
+            })}
+            <div style={{ animation: 'fadeIn 0.5s ease-out', textAlign: 'center', zIndex: 1 }}>
+              <div style={{ fontSize: 72, marginBottom: 16, animation: 'bounce 1.2s ease-in-out infinite' }}>🏆</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: 'white', marginBottom: 10, lineHeight: 1.2 }}>
+                Congrats Guille & Adrian!
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#fde047', marginBottom: 8 }}>
+                Greenwich Open 1st Edition
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#fde047', marginBottom: 32 }}>
+                🎾 Champions!! 🎾
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280', background: 'rgba(255,255,255,0.1)', borderRadius: 999, padding: '6px 16px' }}>
+                Tap para cerrar
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+      <div
+        style={{
+          padding: 16,
+          fontFamily: 'Arial, sans-serif',
+          maxWidth: 1080,
+          margin: '0 auto',
+          background: '#f8fafc',
+          minHeight: '100vh',
+        }}
+      >   
+        {showVersionBanner && dismissedVersion !== APP_VERSION && (
         <div
           style={{
             background: '#fef3c7',
@@ -3596,6 +3661,7 @@ export default function Page() {
         onCopy={copyWhatsAppReminderMessage}
         onClose={closeWhatsAppReminderModal}
       />
-    </div>
+   </div>
+    </>
   );
 }
