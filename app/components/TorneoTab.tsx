@@ -800,9 +800,9 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 8 }}>3ER PUESTO</div>
               <div style={{ ...matchBoxStyle, maxWidth: 280 }}>
-               <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>Ricky H / Fede S</div>
-               <div style={{ ...teamStyle, borderBottom: 'none' }}>Martin PI / Gaston R</div>
-              </div>
+              <div style={{ ...teamStyle, borderBottom: '1px solid #e5e7eb' }}>Ricky H / Fede S</div>
+              <div style={{ ...teamStyle, borderBottom: 'none', fontWeight: 800, color: '#166534' }}>🥉 Martin PI / Gaston R</div>
+               </div>
             </div>
           </div>
         </div>
