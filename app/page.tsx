@@ -2292,6 +2292,17 @@ export default function Page() {
             border: '3px solid #fde047',
           }}
         />
+        <div style={{ marginBottom: 16, display: 'grid', gap: 6, width: '100%', maxWidth: 280 }}>
+  <div style={{ background: '#fde047', borderRadius: 10, padding: '8px 14px', textAlign: 'center', fontWeight: 800, color: '#111827', fontSize: 13 }}>
+    🥇 Guille E / Adrian
+  </div>
+  <div style={{ background: '#e2e8f0', borderRadius: 10, padding: '8px 14px', textAlign: 'center', fontWeight: 700, color: '#334155', fontSize: 13 }}>
+    🥈 Vicente / Eze
+  </div>
+  <div style={{ background: '#fed7aa', borderRadius: 10, padding: '8px 14px', textAlign: 'center', fontWeight: 700, color: '#7c2d12', fontSize: 13 }}>
+    🥉 Martin PI / Gaston R
+  </div>
+</div>
         <div style={{ fontSize: 12, color: '#6b7280', background: 'rgba(255,255,255,0.1)', borderRadius: 999, padding: '6px 16px' }}>
           Tap para cerrar
         </div>
