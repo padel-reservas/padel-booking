@@ -239,6 +239,11 @@ export default function Page() {
   const [newSuggestionDate, setNewSuggestionDate] = useState('');
   const [newSuggestionTime, setNewSuggestionTime] = useState('');
   const [newSuggestionIsBooking, setNewSuggestionIsBooking] = useState(false);
+  const [editingSuggestionId, setEditingSuggestionId] = useState<number | null>(null);
+  const [editSuggestionMessage, setEditSuggestionMessage] = useState('');
+  const [editSuggestionDate, setEditSuggestionDate] = useState('');
+  const [editSuggestionTime, setEditSuggestionTime] = useState('');
+  const [savingSuggestionEdit, setSavingSuggestionEdit] = useState(false);
   const [savingSuggestion, setSavingSuggestion] = useState(false);
 
   const [joinSuggestionName, setJoinSuggestionName] = useState<Record<number, string>>({});
@@ -1115,6 +1120,170 @@ export default function Page() {
     setNewSuggestionIsBooking(false);
 
     await loadData();
+  }
+
+  function canEditSuggestion(s: Suggestion) {
+    if (s.status !== 'open') return false;
+    if (s.is_booking_request && s.booking_status !== 'open') return false;
+    if (adminUnlocked) return true;
+    const me = myPlayerName.trim().toLowerCase();
+    return !!me && (s.author_name || '').trim().toLowerCase() === me;
+  }
+
+  function startEditSuggestion(s: Suggestion) {
+    setEditingSuggestionId(s.id);
+    setEditSuggestionMessage(s.message || '');
+    setEditSuggestionDate(s.suggested_date || '');
+    setEditSuggestionTime(s.suggested_time ? s.suggested_time.slice(0, 5) : '');
+  }
+
+  function cancelEditSuggestion() {
+    setEditingSuggestionId(null);
+    setEditSuggestionMessage('');
+    setEditSuggestionDate('');
+    setEditSuggestionTime('');
+  }
+
+  async function saveSuggestionEdit(s: Suggestion) {
+    if (!canEditSuggestion(s)) return;
+
+    const rawMessage = editSuggestionMessage.trim();
+    const date = editSuggestionDate.trim();
+    const time = normalizeTimeValue(editSuggestionTime);
+
+    if (s.is_booking_request && (!date || !time)) {
+      alert('Para sacar turno, elegí fecha y hora.');
+      return;
+    }
+
+    if (!s.is_booking_request && !rawMessage) {
+      alert('La sugerencia no puede quedar vacía.');
+      return;
+    }
+
+    // Si era el mensaje automático de turno, lo regeneramos con la nueva fecha/hora
+    const oldAuto = `Sacar turno ${s.suggested_date || ''} ${normalizeTimeValue(s.suggested_time || '')}`.trim();
+    const message = s.is_booking_request
+      ? !rawMessage || rawMessage === oldAuto
+        ? `Sacar turno ${date} ${time}`
+        : rawMessage
+      : rawMessage;
+
+    setSavingSuggestionEdit(true);
+
+    const { error } = await supabase
+      .from('suggestions')
+      .update({
+        message,
+        suggested_date: date || null,
+        suggested_time: time || null,
+      })
+      .eq('id', s.id);
+
+    setSavingSuggestionEdit(false);
+
+    if (error) {
+      alert(`No se pudo editar la sugerencia: ${error.message}`);
+      return;
+    }
+
+    cancelEditSuggestion();
+    await loadData();
+  }
+
+  function renderEditSuggestionButton(s: Suggestion) {
+    if (!canEditSuggestion(s) || editingSuggestionId === s.id) return null;
+    return (
+      <button
+        onClick={() => startEditSuggestion(s)}
+        style={{
+          padding: '10px 12px',
+          borderRadius: 10,
+          border: '1px solid #d1d5db',
+          background: 'white',
+          cursor: 'pointer',
+          fontWeight: 700,
+        }}
+      >
+        Editar
+      </button>
+    );
+  }
+
+  function renderSuggestionEditor(s: Suggestion) {
+    if (editingSuggestionId !== s.id) return null;
+    const inputStyle = {
+      padding: '10px 12px',
+      borderRadius: 10,
+      border: '1px solid #d1d5db',
+      fontSize: 14,
+    } as const;
+    return (
+      <div
+        style={{
+          marginTop: 12,
+          padding: 12,
+          borderRadius: 12,
+          background: '#f8fafc',
+          border: '1px solid #e5e7eb',
+          display: 'grid',
+          gap: 8,
+        }}
+      >
+        <div style={{ fontWeight: 800, fontSize: 13 }}>Editar sugerencia</div>
+        <textarea
+          value={editSuggestionMessage}
+          onChange={(e) => setEditSuggestionMessage(e.target.value)}
+          rows={3}
+          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+        />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input
+            type="date"
+            value={editSuggestionDate}
+            onChange={(e) => setEditSuggestionDate(e.target.value)}
+            style={inputStyle}
+          />
+          <input
+            type="time"
+            value={editSuggestionTime}
+            onChange={(e) => setEditSuggestionTime(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => saveSuggestionEdit(s)}
+            disabled={savingSuggestionEdit}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: 'none',
+              background: '#111827',
+              color: 'white',
+              cursor: 'pointer',
+              fontWeight: 700,
+              opacity: savingSuggestionEdit ? 0.6 : 1,
+            }}
+          >
+            {savingSuggestionEdit ? 'Guardando…' : 'Guardar'}
+          </button>
+          <button
+            onClick={cancelEditSuggestion}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid #d1d5db',
+              background: 'white',
+              cursor: 'pointer',
+              fontWeight: 700,
+            }}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
   }
 
   async function joinSuggestion(suggestionId: number) {
@@ -2925,6 +3094,7 @@ export default function Page() {
                     <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
                       {s.author_name} • {new Date(s.created_at).toLocaleString()}
                     </div>
+                    {renderSuggestionEditor(s)}
 
                     {responses.length > 0 && (
                       <div style={{ marginTop: 10, fontSize: 13, color: '#374151' }}>
@@ -2981,6 +3151,8 @@ export default function Page() {
                           Salir
                         </button>
                       )}
+
+                      {renderEditSuggestionButton(s)}
 
                       <button
                         onClick={() => copySuggestionMessage(s.message)}
@@ -3147,6 +3319,7 @@ export default function Page() {
                   <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
                     {s.author_name} • {new Date(s.created_at).toLocaleString()}
                   </div>
+                  {renderSuggestionEditor(s)}
 
                   {s.admin_response_message && (
                     <div
@@ -3328,6 +3501,8 @@ export default function Page() {
                         Salir
                       </button>
                     )}
+
+                    {renderEditSuggestionButton(s)}
 
                     <button
                       onClick={() => copySuggestionMessage(s.message)}
