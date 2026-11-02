@@ -13,14 +13,14 @@ const supabase = createClient(
 const TOURNAMENT_KEY = 'torneo-2026-11';
 const TOURNAMENT_TITLE = '🏆 Próximo torneo — ¿Quién juega?';
 
-// Cada ronda: miércoles a domingo. Última ventana cortada al sábado 12/12.
+// Cada ronda: lunes a domingo. Última ventana cortada al sábado 12/12.
 const INSCRIPCION_HASTA = 'domingo 8/11';
 const ROUND_WINDOWS = [
-  'mié 11/11 – dom 15/11',
-  'mié 18/11 – dom 22/11',
-  'mié 25/11 – dom 29/11',
-  'mié 2/12 – dom 6/12',
-  'mié 9/12 – sáb 12/12',
+  'lun 9/11 – dom 15/11',
+  'lun 16/11 – dom 22/11',
+  'lun 23/11 – dom 29/11',
+  'lun 30/11 – dom 6/12',
+  'lun 7/12 – sáb 12/12',
 ];
 
 function roundName(matches: number) {
@@ -239,24 +239,21 @@ export default function TorneoInteresTab({ rankingPlayers, myPlayerName, adminUn
         <ul style={{ margin: 0, paddingLeft: 18, color: '#334155', lineHeight: 1.6 }}>
           <li>Cuadro a <b>eliminación simple</b>. Pierde y queda afuera.</li>
           <li>Inscripción hasta el <b>{INSCRIPCION_HASTA}</b>. Después se arma el cuadro.</li>
-          <li>Cada ronda se juega de <b>miércoles a domingo</b> (5 días). La final, a más tardar el <b>sábado 12/12</b>.</li>
-          <li>Si el número de parejas no cierra justo, las mejores por ELO pasan directo a la ronda siguiente (bye).</li>
-          <li>Si los anotados son impares, el último queda de <b>suplente</b> y entra si alguien se baja.</li>
+          <li>Cada ronda se juega de <b>lunes a domingo</b>. La final, a más tardar el <b>sábado 12/12</b>.</li>
+          <li>Si el número de parejas no cierra justo, las parejas mejor rankeadas pasan directo a la ronda siguiente.</li>
           <li>Partido no jugado en la ventana: pasa la pareja que ofreció al menos 2 horarios; si ninguna, decide el organizador.</li>
         </ul>
       </div>
 
       {(() => {
         const pairs = Math.floor(juegan.length / 2);
-        const suplente = juegan.length % 2 === 1;
         const plan = bracketPlan(pairs);
         return (
           <div style={card}>
             <h3 style={{ marginTop: 0, marginBottom: 8 }}>📅 Calendario estimado</h3>
             <p style={{ color: '#64748b', marginTop: 0 }}>
               {juegan.length} anotados → <b>{pairs} parejas</b>
-              {suplente ? ' + 1 suplente' : ''}
-              {plan ? ` → cuadro de ${plan.size}${plan.byes > 0 ? ` (${plan.byes} byes)` : ''}, ${plan.rounds} rondas` : ''}
+              {plan ? ` → cuadro de ${plan.size}${plan.byes > 0 ? ` (${plan.byes} pasan directo)` : ''}, ${plan.rounds} rondas` : ''}
             </p>
             {!plan ? (
               <p style={{ color: '#64748b', marginBottom: 0 }}>Se calcula cuando haya al menos 2 parejas.</p>
