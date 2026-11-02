@@ -18,6 +18,7 @@ import TorneoTab from './components/TorneoTab';
 import ApuestasTab from './components/ApuestasTab';
 import AsadoTab from './components/AsadoTab';
 import CopaDeLecheTab from './components/CopaDeLecheTab';
+import TorneoInteresTab from './components/TorneoInteresTab';
 import fotoFinalistas from './foto-finalistas.jpg';
 
 
@@ -2467,6 +2468,7 @@ export default function Page() {
           {tabButton('Apuestas', 'apuestas')}
           {tabButton('Asado', 'asado')}
           {tabButton('Copa de Leche', 'copadeLeche')}
+          {tabButton('¿Jugás el torneo?', 'torneoInteres')}
           {canSeeAdmin && activeTab === 'turnos' && (
             <button
               onClick={() => setShowAdmin(!showAdmin)}
@@ -3676,6 +3678,13 @@ export default function Page() {
 )}
       {!loading && activeTab === 'copadeLeche' && (
   <CopaDeLecheTab
+    rankingPlayers={rankingPlayers}
+    myPlayerName={myPlayerName}
+    adminUnlocked={adminUnlocked}
+  />
+)}
+      {!loading && activeTab === 'torneoInteres' && (
+  <TorneoInteresTab
     rankingPlayers={rankingPlayers}
     myPlayerName={myPlayerName}
     adminUnlocked={adminUnlocked}
