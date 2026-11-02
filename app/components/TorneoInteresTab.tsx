@@ -241,7 +241,7 @@ export default function TorneoInteresTab({ rankingPlayers, myPlayerName, adminUn
           <li>Inscripción hasta el <b>{INSCRIPCION_HASTA}</b>. Después se arma el cuadro.</li>
           <li>Cada ronda se juega de <b>lunes a domingo</b>. La final, a más tardar el <b>sábado 12/12</b>.</li>
           <li>Si el número de parejas no cierra justo, las parejas mejor rankeadas pasan directo a la ronda siguiente.</li>
-          <li>Partido no jugado en la ventana: pasa la pareja que ofreció al menos 2 horarios; si ninguna, decide el organizador.</li>
+          <li>Partido no jugado en la ventana: pasa la pareja que ofreció al menos 2 horarios.</li>
         </ul>
       </div>
 
