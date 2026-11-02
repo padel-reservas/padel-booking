@@ -68,23 +68,256 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { pin, action } = body;
 
-    if (action === 'selfTogglePaid') {
-      const { playerId, paid } = body;
+    // ===== Acciones públicas (sin PIN) con validación en el servidor =====
 
-      if (!playerId || typeof paid !== 'boolean') {
-        return NextResponse.json({ error: 'Faltan datos para actualizar pago' }, { status: 400 });
+    if (action === 'reportPayment') {
+      const payerPlayerId = Number(body.payerPlayerId);
+      const coveredPlayerIds: number[] = Array.isArray(body.coveredPlayerIds)
+        ? body.coveredPlayerIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isFinite(id))
+        : [];
+      const paymentMethod = normalizePaymentMethod(body.paymentMethod);
+      const notes = String(body.notes || '').trim() || null;
+
+      let amount: number | null = null;
+      if (body.amount !== null && body.amount !== undefined && body.amount !== '') {
+        amount = Number(body.amount);
+        if (!Number.isFinite(amount) || amount <= 0 || amount > 10000) {
+          return NextResponse.json({ error: 'Monto inválido' }, { status: 400 });
+        }
       }
 
-      const { error } = await supabase
+      if (!payerPlayerId || coveredPlayerIds.length === 0 || !paymentMethod) {
+        return NextResponse.json({ error: 'Faltan datos del pago' }, { status: 400 });
+      }
+
+      // Todos (el que paga y los cubiertos) tienen que ser del mismo turno
+      const allIds = Array.from(new Set([payerPlayerId, ...coveredPlayerIds]));
+      const { data: playersRows, error: playersError } = await supabase
         .from('players')
-        .update({ paid })
-        .eq('id', playerId);
+        .select('id, slot_id')
+        .in('id', allIds);
 
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 400 });
+      if (playersError) {
+        return NextResponse.json({ error: playersError.message }, { status: 400 });
       }
 
-      return NextResponse.json({ ok: true, mode: 'self-paid-updated' });
+      const slotIds = new Set((playersRows || []).map((p) => p.slot_id));
+      if ((playersRows || []).length !== allIds.length || slotIds.size !== 1) {
+        return NextResponse.json(
+          { error: 'Los jugadores del pago tienen que pertenecer al mismo turno.' },
+          { status: 400 }
+        );
+      }
+
+      const { data: paymentInsert, error: paymentError } = await supabase
+        .from('payments')
+        .insert({
+          payer_player_id: payerPlayerId,
+          payment_method: paymentMethod,
+          status: 'reported',
+          amount,
+          notes,
+        })
+        .select('id')
+        .single();
+
+      if (paymentError || !paymentInsert) {
+        return NextResponse.json(
+          { error: `No se pudo guardar el pago: ${paymentError?.message || 'error desconocido'}` },
+          { status: 400 }
+        );
+      }
+
+      const { error: allocationsError } = await supabase.from('payment_allocations').insert(
+        Array.from(new Set(coveredPlayerIds)).map((playerId) => ({
+          payment_id: paymentInsert.id,
+          player_id: playerId,
+        }))
+      );
+
+      if (allocationsError) {
+        await supabase.from('payments').delete().eq('id', paymentInsert.id);
+        return NextResponse.json(
+          { error: `No se pudieron guardar los jugadores cubiertos: ${allocationsError.message}` },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({ ok: true, mode: 'payment-reported' });
+    }
+
+    if (action === 'recordPaymentReminders') {
+      const playerIds: number[] = Array.isArray(body.playerIds)
+        ? body.playerIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isFinite(id))
+        : [];
+
+      if (playerIds.length === 0 || playerIds.length > 8) {
+        return NextResponse.json({ error: 'Lista de jugadores inválida' }, { status: 400 });
+      }
+
+      for (const playerId of playerIds) {
+        const { error } = await supabase.rpc('record_player_payment_reminder', {
+          p_player_id: playerId,
+        });
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+      }
+
+      return NextResponse.json({ ok: true, mode: 'reminders-recorded' });
+    }
+
+    if (action === 'submitTournamentResult') {
+      const matchId = Number(body.matchId);
+      const submittedBy = String(body.submittedByName || '').trim().toLowerCase();
+      const isAdmin = !!pin && pin === adminPin;
+
+      const toInt = (v: unknown) => (v === null || v === undefined || v === '' ? NaN : parseInt(String(v), 10));
+      const s1p1 = toInt(body.set1p1);
+      const s1p2 = toInt(body.set1p2);
+      const s2p1 = toInt(body.set2p1);
+      const s2p2 = toInt(body.set2p2);
+      let s3p1: number | null = toInt(body.set3p1);
+      let s3p2: number | null = toInt(body.set3p2);
+
+      const validSet = (n: number) => Number.isInteger(n) && n >= 0 && n <= 99;
+      if (!matchId || ![s1p1, s1p2, s2p1, s2p2].every(validSet)) {
+        return NextResponse.json({ error: 'Cargá al menos los primeros 2 sets.' }, { status: 400 });
+      }
+
+      const { data: match, error: matchReadError } = await supabase
+        .from('tournament_matches')
+        .select('id, pair1_id, pair2_id, round, group_name, status')
+        .eq('id', matchId)
+        .maybeSingle();
+
+      if (matchReadError || !match) {
+        return NextResponse.json({ error: 'No se encontró el partido.' }, { status: 400 });
+      }
+
+      if (match.status === 'played') {
+        return NextResponse.json({ error: 'Este partido ya tiene resultado.' }, { status: 400 });
+      }
+
+      const { data: pairs, error: pairsError } = await supabase
+        .from('tournament_pairs')
+        .select('id, player1_name, player2_name')
+        .in('id', [match.pair1_id, match.pair2_id]);
+
+      const pair1 = (pairs || []).find((p) => p.id === match.pair1_id);
+      const pair2 = (pairs || []).find((p) => p.id === match.pair2_id);
+
+      if (pairsError || !pair1 || !pair2) {
+        return NextResponse.json({ error: 'No se encontraron las parejas.' }, { status: 400 });
+      }
+
+      const matchPlayerNames = [pair1.player1_name, pair1.player2_name, pair2.player1_name, pair2.player2_name]
+        .map((n) => String(n || '').trim());
+
+      if (!isAdmin && !matchPlayerNames.some((n) => n.toLowerCase() === submittedBy)) {
+        return NextResponse.json(
+          { error: 'Solo los jugadores del partido o el admin pueden cargar el resultado.' },
+          { status: 403 }
+        );
+      }
+
+      let setsP1 = 0;
+      let setsP2 = 0;
+      if (s1p1 > s1p2) setsP1++; else setsP2++;
+      if (s2p1 > s2p2) setsP1++; else setsP2++;
+
+      if (setsP1 === 1 && setsP2 === 1) {
+        if (!validSet(s3p1) || !validSet(s3p2)) {
+          return NextResponse.json({ error: 'Hay empate en sets, cargá el 3er set.' }, { status: 400 });
+        }
+        if (s3p1 > s3p2) setsP1++; else setsP2++;
+      } else {
+        s3p1 = null;
+        s3p2 = null;
+      }
+
+      const winnerPairId = setsP1 > setsP2 ? match.pair1_id : match.pair2_id;
+
+      const { error: tournamentError } = await supabase
+        .from('tournament_matches')
+        .update({
+          set1_pair1: s1p1, set1_pair2: s1p2,
+          set2_pair1: s2p1, set2_pair2: s2p2,
+          set3_pair1: s3p1, set3_pair2: s3p2,
+          winner_pair_id: winnerPairId,
+          status: 'played',
+          played_at: new Date().toISOString(),
+        })
+        .eq('id', matchId);
+
+      if (tournamentError) {
+        return NextResponse.json(
+          { error: `No se pudo guardar el resultado: ${tournamentError.message}` },
+          { status: 400 }
+        );
+      }
+
+      const { data: rankingData, error: rankingError } = await supabase
+        .from('ranking_players')
+        .select('id, name')
+        .in('name', matchPlayerNames);
+
+      if (rankingError || !rankingData) {
+        return NextResponse.json(
+          { error: `No se pudieron obtener los jugadores del ranking: ${rankingError?.message}` },
+          { status: 400 }
+        );
+      }
+
+      const findId = (name: string) =>
+        rankingData.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase())?.id;
+
+      const a1Id = findId(matchPlayerNames[0]);
+      const a2Id = findId(matchPlayerNames[1]);
+      const b1Id = findId(matchPlayerNames[2]);
+      const b2Id = findId(matchPlayerNames[3]);
+
+      if (!a1Id || !a2Id || !b1Id || !b2Id) {
+        return NextResponse.json(
+          { error: 'Resultado del torneo guardado, pero no se encontraron todos los jugadores en el ranking.' },
+          { status: 400 }
+        );
+      }
+
+      const multiplierMap: Record<string, number> = {
+        groups: 1.5,
+        quarters: 2.0,
+        semis: 2.5,
+        final: 3.0,
+        third_place: 2.5,
+      };
+
+      const { error: matchError } = await supabase.from('matches').insert({
+        match_date: new Date().toISOString().slice(0, 10),
+        match_time: null,
+        slot_id: null,
+        team_a_player_1_id: a1Id,
+        team_a_player_2_id: a2Id,
+        team_b_player_1_id: b1Id,
+        team_b_player_2_id: b2Id,
+        set1_a: s1p1, set1_b: s1p2,
+        set2_a: s2p1, set2_b: s2p2,
+        set3_a: s3p1, set3_b: s3p2,
+        winner_team: winnerPairId === match.pair1_id ? 'A' : 'B',
+        source: 'torneo',
+        tournament_multiplier: multiplierMap[match.round] ?? 1.5,
+        notes: `Torneo ${match.round} — Grupo ${match.group_name || ''}`.trim(),
+      });
+
+      if (matchError) {
+        return NextResponse.json(
+          { error: `Se guardó el resultado del torneo pero no se pudo actualizar el ranking: ${matchError.message}` },
+          { status: 400 }
+        );
+      }
+
+      await runRecalculateRankings();
+      return NextResponse.json({ ok: true, mode: 'tournament-result-saved' });
     }
 
     if (action === 'submitMatch') {
@@ -193,6 +426,55 @@ export async function POST(req: Request) {
 
     if (!pin || pin !== adminPin) {
       return NextResponse.json({ error: 'PIN inválido' }, { status: 401 });
+    }
+
+    if (action === 'selfTogglePaid') {
+      const { playerId, paid } = body;
+
+      if (!playerId || typeof paid !== 'boolean') {
+        return NextResponse.json({ error: 'Faltan datos para actualizar pago' }, { status: 400 });
+      }
+
+      const { error } = await supabase.from('players').update({ paid }).eq('id', playerId);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ ok: true, mode: 'self-paid-updated' });
+    }
+
+    if (action === 'approvePayment' || action === 'rejectPayment') {
+      const paymentId = String(body.paymentId || '');
+      if (!paymentId) {
+        return NextResponse.json({ error: 'Falta paymentId' }, { status: 400 });
+      }
+
+      const { error } =
+        action === 'approvePayment'
+          ? await supabase.rpc('approve_payment', { p_payment_id: paymentId, p_verified_by: 'admin' })
+          : await supabase.rpc('reject_payment', { p_payment_id: paymentId });
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'generateGroupMatches') {
+      const tournamentId = Number(body.tournamentId);
+      if (!tournamentId) {
+        return NextResponse.json({ error: 'Falta tournamentId' }, { status: 400 });
+      }
+
+      const { error } = await supabase.rpc('generate_group_matches', { p_tournament_id: tournamentId });
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ ok: true });
     }
 
     if (action === 'noop') {

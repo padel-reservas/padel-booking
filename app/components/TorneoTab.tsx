@@ -65,7 +65,18 @@ type Props = {
   slotPlayers: (SlotPlayer | SlotPlayerWithPaymentUI)[];
   myPlayerName: string;
   adminUnlocked: boolean;
+  adminPin?: string;
 };
+
+async function callApi(payload: Record<string, unknown>) {
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, error: (data as any).error as string | undefined };
+}
 
 function normalizeName(name: string) {
   return name.trim().toLowerCase();
@@ -248,7 +259,7 @@ const groupColors: Record<string, { bg: string; border: string; text: string }> 
   D: { bg: '#fdf4ff', border: '#e9d5ff', text: '#7e22ce' },
 };
 
-export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayerName, adminUnlocked }: Props) {
+export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayerName, adminUnlocked, adminPin }: Props) {
   const [tournamentPlayers, setTournamentPlayers] = useState<TournamentPlayer[]>([]);
   const [tournamentPairs, setTournamentPairs] = useState<TournamentPair[]>([]);
   const [tournamentMatches, setTournamentMatches] = useState<TournamentMatch[]>([]);
@@ -413,14 +424,16 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
 
     setSaving(true);
 
-    const { error } = await supabase.rpc('generate_group_matches', {
-      p_tournament_id: TOURNAMENT_ID,
+    const { ok: generated, error } = await callApi({
+      action: 'generateGroupMatches',
+      tournamentId: TOURNAMENT_ID,
+      pin: adminPin,
     });
 
     setSaving(false);
 
-    if (error) {
-      alert(`No se pudieron generar los partidos: ${error.message}`);
+    if (!generated) {
+      alert(`No se pudieron generar los partidos: ${error || 'error desconocido'}`);
       return;
     }
 
@@ -509,104 +522,22 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
       if (s3p1 > s3p2) setsP1++; else setsP2++;
     }
 
-    const winnerPairId = setsP1 > setsP2 ? match.pair1_id : match.pair2_id;
-
     setSaving(true);
 
-    const { error: tournamentError } = await supabase
-      .from('tournament_matches')
-      .update({
-        set1_pair1: s1p1, set1_pair2: s1p2,
-        set2_pair1: s2p1, set2_pair2: s2p2,
-        set3_pair1: s3p1, set3_pair2: s3p2,
-        winner_pair_id: winnerPairId,
-        status: 'played',
-        played_at: new Date().toISOString(),
-      })
-      .eq('id', matchId);
-
-    if (tournamentError) {
-      alert(`No se pudo guardar el resultado: ${tournamentError.message}`);
-      setSaving(false);
-      return;
-    }
-
-    const pair1 = tournamentPairs.find(p => p.id === match.pair1_id);
-    const pair2 = tournamentPairs.find(p => p.id === match.pair2_id);
-
-    if (!pair1 || !pair2) {
-      alert('No se encontraron las parejas.');
-      setSaving(false);
-      return;
-    }
-
-    const { data: rankingData, error: rankingError } = await supabase
-      .from('ranking_players')
-      .select('id, name')
-      .in('name', [
-        pair1.player1_name, pair1.player2_name,
-        pair2.player1_name, pair2.player2_name,
-      ]);
-
-    if (rankingError || !rankingData) {
-      alert(`No se pudieron obtener los jugadores del ranking: ${rankingError?.message}`);
-      setSaving(false);
-      return;
-    }
-
-    const findId = (name: string) =>
-      rankingData.find(p => p.name.trim().toLowerCase() === name.trim().toLowerCase())?.id;
-
-    const a1Id = findId(pair1.player1_name);
-    const a2Id = findId(pair1.player2_name);
-    const b1Id = findId(pair2.player1_name);
-    const b2Id = findId(pair2.player2_name);
-
-    if (!a1Id || !a2Id || !b1Id || !b2Id) {
-      alert('No se encontraron todos los jugadores en el ranking.');
-      setSaving(false);
-      return;
-    }
-
-    const winnerTeam = winnerPairId === match.pair1_id ? 'A' : 'B';
-
-    const multiplierMap: Record<string, number> = {
-      groups: 1.5,
-      quarters: 2.0,
-      semis: 2.5,
-      final: 3.0,
-      third_place: 2.5,
-    };
-    const tournamentMultiplier = multiplierMap[match.round] ?? 1.5;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const { error: matchError } = await supabase.from('matches').insert({
-      match_date: today,
-      match_time: null,
-      slot_id: null,
-      team_a_player_1_id: a1Id,
-      team_a_player_2_id: a2Id,
-      team_b_player_1_id: b1Id,
-      team_b_player_2_id: b2Id,
-      set1_a: s1p1, set1_b: s1p2,
-      set2_a: s2p1, set2_b: s2p2,
-      set3_a: s3p1, set3_b: s3p2,
-      winner_team: winnerTeam,
-      source: 'torneo',
-      tournament_multiplier: tournamentMultiplier,
-      notes: `Torneo ${match.round} — Grupo ${match.group_name || ''}`.trim(),
+    const { ok: saved, error } = await callApi({
+      action: 'submitTournamentResult',
+      matchId,
+      set1p1: s1p1, set1p2: s1p2,
+      set2p1: s2p1, set2p2: s2p2,
+      set3p1: s3p1, set3p2: s3p2,
+      submittedByName: myPlayerName,
+      pin: adminUnlocked ? adminPin : undefined,
     });
 
-    if (matchError) {
-      alert(`Se guardó el resultado del torneo pero no se pudo actualizar el ranking: ${matchError.message}`);
+    if (!saved) {
+      alert(error || 'No se pudo guardar el resultado.');
       setSaving(false);
       return;
-    }
-
-    const { error: recalcError } = await supabase.rpc('recalculate_rankings_v2');
-
-    if (recalcError) {
-      alert(`Resultado guardado pero error al recalcular rankings: ${recalcError.message}`);
     }
 
     setSaving(false);

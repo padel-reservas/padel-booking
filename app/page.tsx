@@ -1040,7 +1040,7 @@ export default function Page() {
 
   async function adminAction(action: any) {
     const payload =
-      action.action === 'submitMatch' || action.action === 'selfTogglePaid'
+      action.action === 'submitMatch'
         ? action
         : { ...action, pin };
 
@@ -1989,37 +1989,17 @@ export default function Page() {
 
     setSavingPayment(true);
 
-    const { data: paymentInsert, error: paymentError } = await supabase
-      .from('payments')
-      .insert({
-        payer_player_id: reportPaymentForm.payerPlayerId,
-        payment_method: reportPaymentForm.paymentMethod,
-        status: 'reported',
-        amount: amountValue,
-        notes: reportPaymentForm.notes.trim() || null,
-      })
-      .select('id')
-      .single();
+    const res = await adminAction({
+      action: 'reportPayment',
+      payerPlayerId: reportPaymentForm.payerPlayerId,
+      coveredPlayerIds: reportPaymentForm.coveredPlayerIds,
+      paymentMethod: reportPaymentForm.paymentMethod,
+      amount: amountValue,
+      notes: reportPaymentForm.notes.trim() || null,
+    });
 
-    if (paymentError || !paymentInsert) {
+    if (!res.ok) {
       setSavingPayment(false);
-      alert(`No se pudo guardar el payment: ${paymentError?.message || 'error desconocido'}`);
-      return;
-    }
-
-    const allocationsPayload = reportPaymentForm.coveredPlayerIds.map((playerId) => ({
-      payment_id: paymentInsert.id,
-      player_id: playerId,
-    }));
-
-    const { error: allocationsError } = await supabase
-      .from('payment_allocations')
-      .insert(allocationsPayload);
-
-    if (allocationsError) {
-      await supabase.from('payments').delete().eq('id', paymentInsert.id);
-      setSavingPayment(false);
-      alert(`No se pudieron guardar las allocations: ${allocationsError.message}`);
       return;
     }
 
@@ -2034,15 +2014,8 @@ export default function Page() {
       return;
     }
 
-    const { error } = await supabase.rpc('approve_payment', {
-      p_payment_id: paymentId,
-      p_verified_by: 'admin',
-    });
-
-    if (error) {
-      alert(`No se pudo aprobar el payment: ${error.message}`);
-      return;
-    }
+    const res = await adminAction({ action: 'approvePayment', paymentId });
+    if (!res.ok) return;
 
     await loadData();
   }
@@ -2056,14 +2029,8 @@ export default function Page() {
     const ok = window.confirm('¿Seguro que querés rechazar este payment reportado?');
     if (!ok) return;
 
-    const { error } = await supabase.rpc('reject_payment', {
-      p_payment_id: paymentId,
-    });
-
-    if (error) {
-      alert(`No se pudo rechazar el payment: ${error.message}`);
-      return;
-    }
+    const res = await adminAction({ action: 'rejectPayment', paymentId });
+    if (!res.ok) return;
 
     await loadData();
   }
@@ -2085,16 +2052,11 @@ export default function Page() {
       `Pendientes: ${pendingNames}. ` +
       `Por favor envíenlo por Venmo o Zelle. Gracias.`;
 
-    for (const player of unpaidPlayers) {
-      const { error } = await supabase.rpc('record_player_payment_reminder', {
-        p_player_id: player.id,
-      });
-
-      if (error) {
-        alert(`No se pudo registrar el reminder para ${player.name}: ${error.message}`);
-        return;
-      }
-    }
+    const res = await adminAction({
+      action: 'recordPaymentReminders',
+      playerIds: unpaidPlayers.map((p) => p.id),
+    });
+    if (!res.ok) return;
 
     setWhatsAppReminderMessage(message);
     setWhatsAppReminderCopied(false);
@@ -3835,6 +3797,7 @@ export default function Page() {
     slotPlayers={slotPlayers}
     myPlayerName={myPlayerName}
     adminUnlocked={adminUnlocked}
+    adminPin={pin}
   />
 )}  
       {!loading && activeTab === 'apuestas' && (
