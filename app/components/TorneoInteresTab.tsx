@@ -13,6 +13,45 @@ const supabase = createClient(
 const TOURNAMENT_KEY = 'torneo-2026-11';
 const TOURNAMENT_TITLE = '🏆 Próximo torneo — ¿Quién juega?';
 
+// Cada ronda: miércoles a domingo. Última ventana cortada al sábado 12/12.
+const INSCRIPCION_HASTA = 'domingo 8/11';
+const ROUND_WINDOWS = [
+  'mié 11/11 – dom 15/11',
+  'mié 18/11 – dom 22/11',
+  'mié 25/11 – dom 29/11',
+  'mié 2/12 – dom 6/12',
+  'mié 9/12 – sáb 12/12',
+];
+
+function roundName(matches: number) {
+  if (matches === 1) return 'Final';
+  if (matches === 2) return 'Semis';
+  if (matches === 4) return 'Cuartos';
+  if (matches === 8) return 'Octavos';
+  if (matches === 16) return '16avos';
+  return `Ronda de ${matches * 2}`;
+}
+
+// Arma el plan de rondas para N parejas (eliminación simple, byes a los mejores ELO)
+function bracketPlan(pairs: number) {
+  if (pairs < 2) return null;
+  const rounds = Math.ceil(Math.log2(pairs));
+  const size = 2 ** rounds;
+  const byes = size - pairs;
+  const list = [];
+  for (let r = 0; r < rounds; r++) {
+    const slotsThisRound = size / 2 ** r;
+    const matches = slotsThisRound / 2;
+    const playedMatches = r === 0 ? pairs - size / 2 : matches;
+    list.push({
+      name: roundName(matches),
+      matches: playedMatches,
+      window: ROUND_WINDOWS[r] ?? 'sin ventana disponible',
+    });
+  }
+  return { rounds, size, byes, list, fits: rounds <= ROUND_WINDOWS.length };
+}
+
 type Status = 'in' | 'out';
 
 type InteresRow = {
@@ -193,13 +232,63 @@ export default function TorneoInteresTab({ rankingPlayers, myPlayerName, adminUn
           <span style={{ fontWeight: 700, color: '#dc2626' }}>❌ {noJuegan.length} no</span>
           <span style={{ fontWeight: 700, color: '#64748b' }}>⏳ {pendientes.length} sin responder</span>
         </div>
-        {juegan.length > 0 && (
-          <p style={{ color: '#64748b', marginBottom: 0, fontSize: 13 }}>
-            {Math.floor(juegan.length / 2)} parejas posibles
-            {juegan.length % 2 === 1 ? ' (falta 1 para cerrar pareja)' : ''}
-          </p>
-        )}
       </div>
+
+      <div style={card}>
+        <h3 style={{ marginTop: 0, marginBottom: 8 }}>📋 Formato</h3>
+        <ul style={{ margin: 0, paddingLeft: 18, color: '#334155', lineHeight: 1.6 }}>
+          <li>Cuadro a <b>eliminación simple</b>. Pierde y queda afuera.</li>
+          <li>Inscripción hasta el <b>{INSCRIPCION_HASTA}</b>. Después se arma el cuadro.</li>
+          <li>Cada ronda se juega de <b>miércoles a domingo</b> (5 días). La final, a más tardar el <b>sábado 12/12</b>.</li>
+          <li>Si el número de parejas no cierra justo, las mejores por ELO pasan directo a la ronda siguiente (bye).</li>
+          <li>Si los anotados son impares, el último queda de <b>suplente</b> y entra si alguien se baja.</li>
+          <li>Partido no jugado en la ventana: pasa la pareja que ofreció al menos 2 horarios; si ninguna, decide el organizador.</li>
+        </ul>
+      </div>
+
+      {(() => {
+        const pairs = Math.floor(juegan.length / 2);
+        const suplente = juegan.length % 2 === 1;
+        const plan = bracketPlan(pairs);
+        return (
+          <div style={card}>
+            <h3 style={{ marginTop: 0, marginBottom: 8 }}>📅 Calendario estimado</h3>
+            <p style={{ color: '#64748b', marginTop: 0 }}>
+              {juegan.length} anotados → <b>{pairs} parejas</b>
+              {suplente ? ' + 1 suplente' : ''}
+              {plan ? ` → cuadro de ${plan.size}${plan.byes > 0 ? ` (${plan.byes} byes)` : ''}, ${plan.rounds} rondas` : ''}
+            </p>
+            {!plan ? (
+              <p style={{ color: '#64748b', marginBottom: 0 }}>Se calcula cuando haya al menos 2 parejas.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 6 }}>
+                {plan.list.map((r) => (
+                  <div
+                    key={r.name}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      background: '#f8fafc',
+                      fontSize: 14,
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>
+                      {r.name} <span style={{ color: '#64748b', fontWeight: 400 }}>({r.matches} {r.matches === 1 ? 'partido' : 'partidos'})</span>
+                    </span>
+                    <span style={{ color: '#334155' }}>{r.window}</span>
+                  </div>
+                ))}
+                {!plan.fits && (
+                  <p style={{ color: '#b45309', margin: 0 }}>Demasiadas parejas para terminar el 12/12.</p>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {loading ? (
         <div style={card}>Cargando…</div>
