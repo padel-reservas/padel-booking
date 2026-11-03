@@ -957,16 +957,8 @@ export default function Page() {
       return;
     }
 
-    const { error } = await supabase.from('players').insert({
-      slot_id: slotId,
-      name: rawName,
-      paid: false,
-    });
-
-    if (error) {
-      alert(`No se pudo anotar: ${error.message}`);
-      return;
-    }
+    const res = await adminAction({ action: 'joinSlot', slotId, name: rawName });
+    if (!res.ok) return;
 
     setNameInput((v) => ({ ...v, [slotId]: '' }));
     loadData();
@@ -1000,38 +992,12 @@ export default function Page() {
       }
     }
 
-    const shouldCreateUrgentSuggestion =
-      slot.activePlayers.length === 4 && slot.waitlistPlayers.length === 0;
-
-    const removedPlayerName = player.name;
-
-    const { error } = await supabase.from('players').delete().eq('id', playerId);
-
-    if (error) {
-      alert(`No se pudo borrar: ${error.message}`);
-      return;
-    }
-
-    if (shouldCreateUrgentSuggestion) {
-      const message = `${removedPlayerName} se bajó del turno del ${slot.date} a las ${slot.time}. Falta 1 jugador.`;
-
-      const { error: suggestionError } = await supabase.from('suggestions').insert({
-        author_name: 'Sistema',
-        type: 'replacement_needed',
-        message,
-        slot_id: slot.id,
-        suggested_date: slot.date,
-        suggested_time: slot.time,
-        is_urgent: true,
-        status: 'open',
-        is_booking_request: false,
-        booking_status: 'open',
-      });
-
-      if (suggestionError) {
-        alert(`Se borró el jugador, pero no se pudo crear la sugerencia: ${suggestionError.message}`);
-      }
-    }
+    const res = await adminAction({
+      action: 'leaveSlot',
+      playerId,
+      names: [myPlayerName, nameInput[slot.id] || ''],
+    });
+    if (!res.ok) return;
 
     await loadData();
   }
@@ -1091,24 +1057,19 @@ export default function Page() {
 
     setSavingSuggestion(true);
 
-    const { error } = await supabase.from('suggestions').insert({
-      author_name: author,
+    const res = await adminAction({
+      action: 'createSuggestion',
+      author,
       type: newSuggestionType,
       message,
-      suggested_date: normalizedSuggestedDate || null,
-      suggested_time: normalizedSuggestedTime || null,
-      is_urgent: false,
-      status: 'open',
-      is_booking_request: newSuggestionIsBooking,
-      booking_status: 'open',
+      date: normalizedSuggestedDate,
+      time: normalizedSuggestedTime,
+      isBooking: newSuggestionIsBooking,
     });
 
     setSavingSuggestion(false);
 
-    if (error) {
-      alert(`No se pudo guardar la sugerencia: ${error.message}`);
-      return;
-    }
+    if (!res.ok) return;
 
     setNewSuggestionAuthor('');
     setNewSuggestionType('availability');
@@ -1169,21 +1130,18 @@ export default function Page() {
 
     setSavingSuggestionEdit(true);
 
-    const { error } = await supabase
-      .from('suggestions')
-      .update({
-        message,
-        suggested_date: date || null,
-        suggested_time: time || null,
-      })
-      .eq('id', s.id);
+    const res = await adminAction({
+      action: 'editSuggestion',
+      suggestionId: s.id,
+      editorName: myPlayerName,
+      message,
+      date,
+      time,
+    });
 
     setSavingSuggestionEdit(false);
 
-    if (error) {
-      alert(`No se pudo editar la sugerencia: ${error.message}`);
-      return;
-    }
+    if (!res.ok) return;
 
     cancelEditSuggestion();
     await loadData();
@@ -1292,20 +1250,8 @@ export default function Page() {
       return;
     }
 
-    const { error } = await supabase.from('suggestion_responses').insert({
-      suggestion_id: suggestionId,
-      responder_name: name,
-    });
-
-    if (error) {
-      const msg = (error.message || '').toLowerCase();
-      if (msg.includes('duplicate') || msg.includes('unique')) {
-        alert('Ese nombre ya se sumó a esta sugerencia.');
-      } else {
-        alert(`No se pudo sumar: ${error.message}`);
-      }
-      return;
-    }
+    const res = await adminAction({ action: 'joinSuggestion', suggestionId, name });
+    if (!res.ok) return;
 
     setJoinSuggestionName((prev) => ({ ...prev, [suggestionId]: '' }));
     await loadData();
@@ -1319,16 +1265,8 @@ export default function Page() {
       return;
     }
 
-    const { error } = await supabase
-      .from('suggestion_responses')
-      .delete()
-      .eq('suggestion_id', suggestionId)
-      .ilike('responder_name', responderName);
-
-    if (error) {
-      alert(`No se pudo salir: ${error.message}`);
-      return;
-    }
+    const res = await adminAction({ action: 'leaveSuggestion', suggestionId, name: responderName });
+    if (!res.ok) return;
 
     await loadData();
   }
@@ -1341,20 +1279,8 @@ export default function Page() {
       return;
     }
 
-    const { error } = await supabase.from('suggestion_alternative_joiners').insert({
-      alternative_id: alternativeId,
-      responder_name: responderName,
-    });
-
-    if (error) {
-      const msg = (error.message || '').toLowerCase();
-      if (msg.includes('duplicate') || msg.includes('unique')) {
-        alert('Ese nombre ya se sumó a esta opción.');
-      } else {
-        alert(`No se pudo sumar a la opción: ${error.message}`);
-      }
-      return;
-    }
+    const res = await adminAction({ action: 'joinAlternative', alternativeId, name: responderName });
+    if (!res.ok) return;
 
     setJoinSuggestionName((prev) => ({ ...prev, [suggestionId]: '' }));
     await loadData();
@@ -1368,16 +1294,8 @@ export default function Page() {
       return;
     }
 
-    const { error } = await supabase
-      .from('suggestion_alternative_joiners')
-      .delete()
-      .eq('alternative_id', alternativeId)
-      .ilike('responder_name', responderName);
-
-    if (error) {
-      alert(`No se pudo salir de la opción: ${error.message}`);
-      return;
-    }
+    const res = await adminAction({ action: 'leaveAlternative', alternativeId, name: responderName });
+    if (!res.ok) return;
 
     await loadData();
   }
@@ -1405,55 +1323,16 @@ export default function Page() {
 
     setSavingAlternativeFor(suggestionId);
 
-    const { error: updateSuggestionError } = await supabase
-      .from('suggestions')
-      .update({
-        admin_response_type: 'alternative_offered',
-        admin_response_message: draft.message.trim() || null,
-        admin_responded_at: new Date().toISOString(),
-        booking_status: 'open',
-      })
-      .eq('id', suggestionId);
-
-    if (updateSuggestionError) {
-      setSavingAlternativeFor(null);
-      alert(`No se pudo guardar la respuesta admin: ${updateSuggestionError.message}`);
-      return;
-    }
-
-    const existingAlternatives = alternativesBySuggestionId.get(suggestionId) || [];
-    const existingAlternativeIds = existingAlternatives.map((alt) => alt.id);
-
-    if (existingAlternativeIds.length > 0) {
-      const { error: deleteOldAlternativesError } = await supabase
-        .from('suggestion_alternatives')
-        .delete()
-        .eq('suggestion_id', suggestionId);
-
-      if (deleteOldAlternativesError) {
-        setSavingAlternativeFor(null);
-        alert(`No se pudieron actualizar las alternativas: ${deleteOldAlternativesError.message}`);
-        return;
-      }
-    }
-
-    const payload = cleanedOptions.map((option) => ({
-      suggestion_id: suggestionId,
-      alt_date: option.date,
-      alt_time: option.time,
-      alt_label: option.label || null,
-    }));
-
-    const { error: insertAlternativesError } = await supabase
-      .from('suggestion_alternatives')
-      .insert(payload);
+    const res = await adminAction({
+      action: 'saveSuggestionAlternatives',
+      suggestionId,
+      message: draft.message.trim(),
+      options: cleanedOptions,
+    });
 
     setSavingAlternativeFor(null);
 
-    if (insertAlternativesError) {
-      alert(`No se pudieron guardar las alternativas: ${insertAlternativesError.message}`);
-      return;
-    }
+    if (!res.ok) return;
 
     setOpenAlternativeEditorFor(null);
     await loadData();
@@ -1468,29 +1347,8 @@ export default function Page() {
     const ok = window.confirm('¿Seguro que querés borrar las alternativas propuestas?');
     if (!ok) return;
 
-    const { error: deleteAlternativesError } = await supabase
-      .from('suggestion_alternatives')
-      .delete()
-      .eq('suggestion_id', suggestionId);
-
-    if (deleteAlternativesError) {
-      alert(`No se pudieron borrar las alternativas: ${deleteAlternativesError.message}`);
-      return;
-    }
-
-    const { error: updateSuggestionError } = await supabase
-      .from('suggestions')
-      .update({
-        admin_response_type: null,
-        admin_response_message: null,
-        admin_responded_at: null,
-      })
-      .eq('id', suggestionId);
-
-    if (updateSuggestionError) {
-      alert(`No se pudo limpiar la respuesta admin: ${updateSuggestionError.message}`);
-      return;
-    }
+    const res = await adminAction({ action: 'clearSuggestionAlternatives', suggestionId });
+    if (!res.ok) return;
 
     if (openAlternativeEditorFor === suggestionId) {
       setOpenAlternativeEditorFor(null);
@@ -1505,15 +1363,8 @@ export default function Page() {
       return;
     }
 
-    const { error } = await supabase
-      .from('suggestions')
-      .update({ status: 'resolved' })
-      .eq('id', suggestionId);
-
-    if (error) {
-      alert(`No se pudo cerrar la sugerencia: ${error.message}`);
-      return;
-    }
+    const res = await adminAction({ action: 'closeSuggestion', suggestionId });
+    if (!res.ok) return;
 
     await loadData();
   }
@@ -1524,20 +1375,8 @@ export default function Page() {
       return;
     }
 
-    const { error } = await supabase
-      .from('suggestions')
-      .update({
-        booking_status: 'not_available',
-        admin_response_type: 'not_available',
-        admin_response_message: null,
-        admin_responded_at: new Date().toISOString(),
-      })
-      .eq('id', suggestionId);
-
-    if (error) {
-      alert(`No se pudo actualizar la sugerencia: ${error.message}`);
-      return;
-    }
+    const res = await adminAction({ action: 'markSuggestionNotAvailable', suggestionId });
+    if (!res.ok) return;
 
     await loadData();
   }
@@ -1548,126 +1387,8 @@ export default function Page() {
       return;
     }
 
-    const { data: freshSuggestion, error: freshSuggestionError } = await supabase
-      .from('suggestions')
-      .select('*')
-      .eq('id', suggestionId)
-      .single();
-
-    if (freshSuggestionError || !freshSuggestion) {
-      alert(`No se pudo leer la sugerencia: ${freshSuggestionError?.message || 'error desconocido'}`);
-      return;
-    }
-
-    if (!freshSuggestion.is_booking_request) {
-      alert('Esta acción es solo para sugerencias de sacar turno.');
-      return;
-    }
-
-    const slotDate = (freshSuggestion.suggested_date || '').trim();
-    const slotTime = normalizeTimeValue(freshSuggestion.suggested_time || '');
-
-    if (!slotDate || !slotTime) {
-      alert('La sugerencia no tiene fecha u hora válidas.');
-      return;
-    }
-
-    const { data: existingSlot, error: existingSlotError } = await supabase
-      .from('slots')
-      .select('id')
-      .eq('date', slotDate)
-      .eq('time', slotTime)
-      .maybeSingle();
-
-    if (existingSlotError) {
-      alert(`No se pudo validar si el turno ya existía: ${existingSlotError.message}`);
-      return;
-    }
-
-    if (existingSlot) {
-      alert('Ya existe un turno con esa fecha y hora en la app.');
-      return;
-    }
-
-    const { data: createdSlot, error: createSlotError } = await supabase
-      .from('slots')
-      .insert({
-        date: slotDate,
-        time: slotTime,
-      })
-      .select()
-      .single();
-
-    if (createSlotError || !createdSlot) {
-      alert(`No se pudo crear el turno: ${createSlotError?.message || 'error desconocido'}`);
-      return;
-    }
-
-    const { data: freshResponses, error: responsesError } = await supabase
-      .from('suggestion_responses')
-      .select('*')
-      .eq('suggestion_id', suggestionId)
-      .order('created_at', { ascending: true });
-
-    if (responsesError) {
-      alert(`Se creó el turno, pero no se pudieron leer los jugadores sumados: ${responsesError.message}`);
-      return;
-    }
-
-    const candidateNames: string[] = [];
-
-    if (freshSuggestion.author_name?.trim()) {
-      candidateNames.push(freshSuggestion.author_name.trim());
-    }
-
-    for (const response of freshResponses || []) {
-      if (response.responder_name?.trim()) {
-        candidateNames.push(response.responder_name.trim());
-      }
-    }
-
-    const uniqueNames: string[] = [];
-    for (const name of candidateNames) {
-      const normalized = normalizeName(name);
-      if (!normalized) continue;
-      if (!uniqueNames.some((existing) => normalizeName(existing) === normalized)) {
-        uniqueNames.push(name);
-      }
-    }
-
-    const playersToInsert = uniqueNames.slice(0, MAX_PLAYERS);
-
-    if (playersToInsert.length > 0) {
-      const playersPayload = playersToInsert.map((name) => ({
-        slot_id: createdSlot.id,
-        name,
-        paid: false,
-      }));
-
-      const { error: insertPlayersError } = await supabase
-        .from('players')
-        .insert(playersPayload);
-
-      if (insertPlayersError) {
-        alert(`Se creó el turno, pero no se pudieron agregar los jugadores: ${insertPlayersError.message}`);
-        return;
-      }
-    }
-
-    const { error: updateSuggestionError } = await supabase
-      .from('suggestions')
-      .update({
-        booking_status: 'booked',
-        status: 'resolved',
-        admin_response_type: 'accepted',
-        admin_responded_at: new Date().toISOString(),
-      })
-      .eq('id', suggestionId);
-
-    if (updateSuggestionError) {
-      alert(`Se creó el turno, pero no se pudo actualizar la sugerencia: ${updateSuggestionError.message}`);
-      return;
-    }
+    const res = await adminAction({ action: 'bookSuggestion', suggestionId });
+    if (!res.ok) return;
 
     await loadData();
   }
@@ -1689,112 +1410,16 @@ export default function Page() {
       return;
     }
 
-    const slotDate = (alternative.alt_date || '').trim();
-    const slotTime = normalizeTimeValue(alternative.alt_time || '');
-
-    if (!slotDate || !slotTime) {
-      setCreatingSlotFromAlternativeId(null);
-      alert('La alternativa no tiene fecha u hora válidas.');
-      return;
-    }
-
-    const { data: existingSlot, error: existingSlotError } = await supabase
-      .from('slots')
-      .select('id')
-      .eq('date', slotDate)
-      .eq('time', slotTime)
-      .maybeSingle();
-
-    if (existingSlotError) {
-      setCreatingSlotFromAlternativeId(null);
-      alert(`No se pudo validar si el turno ya existía: ${existingSlotError.message}`);
-      return;
-    }
-
-    if (existingSlot) {
-      setCreatingSlotFromAlternativeId(null);
-      alert('Ya existe un turno con esa fecha y hora en la app.');
-      return;
-    }
-
-    const { data: createdSlot, error: createSlotError } = await supabase
-      .from('slots')
-      .insert({
-        date: slotDate,
-        time: slotTime,
-      })
-      .select()
-      .single();
-
-    if (createSlotError || !createdSlot) {
-      setCreatingSlotFromAlternativeId(null);
-      alert(`No se pudo crear el turno: ${createSlotError?.message || 'error desconocido'}`);
-      return;
-    }
-
-    const joiners = alternativeJoinersByAlternativeId.get(alternativeId) || [];
-    const candidateNames: string[] = [];
-
-    if (suggestion.author_name?.trim()) {
-      candidateNames.push(suggestion.author_name.trim());
-    }
-
-    for (const joiner of joiners) {
-      if (joiner.responder_name?.trim()) {
-        candidateNames.push(joiner.responder_name.trim());
-      }
-    }
-
-    const uniqueNames: string[] = [];
-    for (const name of candidateNames) {
-      const normalized = normalizeName(name);
-      if (!normalized) continue;
-      if (!uniqueNames.some((existing) => normalizeName(existing) === normalized)) {
-        uniqueNames.push(name);
-      }
-    }
-
-    const playersToInsert = uniqueNames.slice(0, MAX_PLAYERS);
-
-    if (playersToInsert.length > 0) {
-      const payload = playersToInsert.map((name) => ({
-        slot_id: createdSlot.id,
-        name,
-        paid: false,
-      }));
-
-      const { error: insertPlayersError } = await supabase.from('players').insert(payload);
-
-      if (insertPlayersError) {
-        setCreatingSlotFromAlternativeId(null);
-        alert(`Se creó el turno, pero no se pudieron agregar los jugadores: ${insertPlayersError.message}`);
-        return;
-      }
-    }
-
-    const responseMessageBase = suggestion.admin_response_message?.trim() || '';
-    const alternativeText = formatAlternativeLine(alternative);
-    const nextResponseMessage = responseMessageBase
-      ? `${responseMessageBase}\n\n✅ Se creó turno desde alternativa: ${alternativeText}`
-      : `✅ Se creó turno desde alternativa: ${alternativeText}`;
-
-    const { error: updateSuggestionError } = await supabase
-      .from('suggestions')
-      .update({
-        booking_status: 'booked',
-        status: 'resolved',
-        admin_response_type: 'accepted',
-        admin_response_message: nextResponseMessage,
-        admin_responded_at: new Date().toISOString(),
-      })
-      .eq('id', suggestionId);
+    const res = await adminAction({
+      action: 'createSlotFromAlternative',
+      suggestionId,
+      alternativeId,
+      alternativeText: formatAlternativeLine(alternative),
+    });
 
     setCreatingSlotFromAlternativeId(null);
 
-    if (updateSuggestionError) {
-      alert(`Se creó el turno, pero no se pudo actualizar la sugerencia: ${updateSuggestionError.message}`);
-      return;
-    }
+    if (!res.ok) return;
 
     if (openAlternativeEditorFor === suggestionId) {
       setOpenAlternativeEditorFor(null);

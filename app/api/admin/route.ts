@@ -51,6 +51,91 @@ async function validateSubmitterForSlot(slotId: number, submittedByPlayerId: num
   }
 }
 
+const MAX_PLAYERS = 4;
+const SUGGESTION_TYPES = ['availability', 'need_players', 'replacement_needed'];
+
+function cleanName(raw: unknown) {
+  return String(raw || '').trim().slice(0, 60);
+}
+
+function sameName(a: unknown, b: unknown) {
+  const x = String(a || '').trim().toLowerCase();
+  const y = String(b || '').trim().toLowerCase();
+  return !!x && x === y;
+}
+
+function cleanTime(raw: unknown) {
+  const value = String(raw || '').trim();
+  const match = value.match(/^(\d{2}):(\d{2})/);
+  return match ? `${match[1]}:${match[2]}` : '';
+}
+
+function cleanDate(raw: unknown) {
+  const value = String(raw || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+}
+
+function bad(message: string, status = 400) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+// Crea un turno con jugadores y marca la sugerencia como resuelta (lo usan "Turno sacado" y "crear desde alternativa")
+async function createSlotForSuggestion(
+  slotDate: string,
+  slotTime: string,
+  names: string[],
+  suggestionId: number,
+  suggestionPatch: Record<string, unknown>
+) {
+  const { data: existingSlot, error: existingSlotError } = await supabase
+    .from('slots')
+    .select('id')
+    .eq('date', slotDate)
+    .eq('time', slotTime)
+    .maybeSingle();
+
+  if (existingSlotError) return bad(`No se pudo validar si el turno ya existía: ${existingSlotError.message}`);
+  if (existingSlot) return bad('Ya existe un turno con esa fecha y hora en la app.');
+
+  const { data: createdSlot, error: createSlotError } = await supabase
+    .from('slots')
+    .insert({ date: slotDate, time: slotTime })
+    .select()
+    .single();
+
+  if (createSlotError || !createdSlot) {
+    return bad(`No se pudo crear el turno: ${createSlotError?.message || 'error desconocido'}`);
+  }
+
+  const uniqueNames: string[] = [];
+  for (const raw of names) {
+    const name = cleanName(raw);
+    if (name && !uniqueNames.some((n) => sameName(n, name))) uniqueNames.push(name);
+  }
+
+  const playersToInsert = uniqueNames.slice(0, MAX_PLAYERS);
+  if (playersToInsert.length > 0) {
+    const { error: insertPlayersError } = await supabase
+      .from('players')
+      .insert(playersToInsert.map((name) => ({ slot_id: createdSlot.id, name, paid: false })));
+
+    if (insertPlayersError) {
+      return bad(`Se creó el turno, pero no se pudieron agregar los jugadores: ${insertPlayersError.message}`);
+    }
+  }
+
+  const { error: updateSuggestionError } = await supabase
+    .from('suggestions')
+    .update(suggestionPatch)
+    .eq('id', suggestionId);
+
+  if (updateSuggestionError) {
+    return bad(`Se creó el turno, pero no se pudo actualizar la sugerencia: ${updateSuggestionError.message}`);
+  }
+
+  return NextResponse.json({ ok: true, slotId: createdSlot.id });
+}
+
 function normalizePaymentMethod(raw: unknown): 'venmo' | 'zelle' | null {
   const value = String(raw || '')
     .trim()
@@ -320,6 +405,202 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, mode: 'tournament-result-saved' });
     }
 
+    // ===== Turnos y sugerencias (públicas, con validación) =====
+
+    if (action === 'joinSlot') {
+      const slotId = Number(body.slotId);
+      const name = cleanName(body.name);
+      if (!slotId || !name) return bad('Poné tu nombre');
+
+      const { data: slot } = await supabase.from('slots').select('id').eq('id', slotId).maybeSingle();
+      if (!slot) return bad('No se encontró el turno.');
+
+      const { data: current, error: currentError } = await supabase
+        .from('players')
+        .select('name')
+        .eq('slot_id', slotId);
+      if (currentError) return bad(currentError.message);
+      if ((current || []).some((p) => sameName(p.name, name))) {
+        return bad('Ese nombre ya está anotado en este turno');
+      }
+
+      const { error } = await supabase.from('players').insert({ slot_id: slotId, name, paid: false });
+      if (error) return bad(`No se pudo anotar: ${error.message}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'leaveSlot') {
+      const playerId = Number(body.playerId);
+      const isAdmin = !!pin && pin === adminPin;
+      if (!playerId) return bad('Falta playerId');
+
+      const { data: player, error: playerError } = await supabase
+        .from('players')
+        .select('id, name, slot_id')
+        .eq('id', playerId)
+        .maybeSingle();
+      if (playerError || !player) return bad('No se encontró el jugador.');
+
+      const identities: unknown[] = Array.isArray(body.names) ? body.names : [];
+      if (!isAdmin && !identities.some((n) => sameName(n, player.name))) {
+        return bad('Solo podés borrarte a vos mismo.', 403);
+      }
+
+      const { data: slot } = await supabase
+        .from('slots')
+        .select('id, date, time')
+        .eq('id', player.slot_id)
+        .maybeSingle();
+      const { count: playersBefore } = await supabase
+        .from('players')
+        .select('id', { count: 'exact', head: true })
+        .eq('slot_id', player.slot_id);
+
+      const { error } = await supabase.from('players').delete().eq('id', playerId);
+      if (error) return bad(`No se pudo borrar: ${error.message}`);
+
+      // Si el turno estaba justo completo (4 y sin espera), avisamos que falta 1
+      if (slot && playersBefore === MAX_PLAYERS) {
+        const { error: suggestionError } = await supabase.from('suggestions').insert({
+          author_name: 'Sistema',
+          type: 'replacement_needed',
+          message: `${player.name} se bajó del turno del ${slot.date} a las ${slot.time}. Falta 1 jugador.`,
+          slot_id: slot.id,
+          suggested_date: slot.date,
+          suggested_time: slot.time,
+          is_urgent: true,
+          status: 'open',
+          is_booking_request: false,
+          booking_status: 'open',
+        });
+        if (suggestionError) {
+          return bad(`Se borró el jugador, pero no se pudo crear la sugerencia: ${suggestionError.message}`);
+        }
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'createSuggestion') {
+      const author = cleanName(body.author);
+      const isBooking = body.isBooking === true;
+      const type = SUGGESTION_TYPES.includes(body.type) ? body.type : 'availability';
+      const date = cleanDate(body.date);
+      const time = cleanTime(body.time);
+      const rawMessage = String(body.message || '').trim().slice(0, 1000);
+
+      if (!author) return bad('Elegí tu jugador en Ranking o escribí tu nombre.');
+      if (isBooking && (!date || !time)) return bad('Para sacar turno, elegí fecha y hora.');
+      if (!isBooking && !rawMessage) return bad('Escribí una sugerencia.');
+
+      const { error } = await supabase.from('suggestions').insert({
+        author_name: author,
+        type,
+        message: isBooking ? rawMessage || `Sacar turno ${date} ${time}` : rawMessage,
+        suggested_date: date || null,
+        suggested_time: time || null,
+        is_urgent: false,
+        status: 'open',
+        is_booking_request: isBooking,
+        booking_status: 'open',
+      });
+      if (error) return bad(`No se pudo guardar la sugerencia: ${error.message}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'editSuggestion') {
+      const suggestionId = Number(body.suggestionId);
+      const isAdmin = !!pin && pin === adminPin;
+      const { data: sug, error: sugError } = await supabase
+        .from('suggestions')
+        .select('*')
+        .eq('id', suggestionId)
+        .maybeSingle();
+      if (sugError || !sug) return bad('No se encontró la sugerencia.');
+
+      if (sug.status !== 'open' || (sug.is_booking_request && sug.booking_status !== 'open')) {
+        return bad('La sugerencia ya no se puede editar.');
+      }
+      if (!isAdmin && !sameName(body.editorName, sug.author_name)) {
+        return bad('Solo el autor puede editar la sugerencia.', 403);
+      }
+
+      const date = cleanDate(body.date);
+      const time = cleanTime(body.time);
+      const message = String(body.message || '').trim().slice(0, 1000);
+      if (sug.is_booking_request && (!date || !time)) return bad('Para sacar turno, elegí fecha y hora.');
+      if (!message) return bad('La sugerencia no puede quedar vacía.');
+
+      const { error } = await supabase
+        .from('suggestions')
+        .update({ message, suggested_date: date || null, suggested_time: time || null })
+        .eq('id', suggestionId);
+      if (error) return bad(`No se pudo editar la sugerencia: ${error.message}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'joinSuggestion' || action === 'leaveSuggestion') {
+      const suggestionId = Number(body.suggestionId);
+      const name = cleanName(body.name);
+      if (!suggestionId || !name) return bad('Elegí tu jugador en Ranking o escribí tu nombre.');
+
+      if (action === 'joinSuggestion') {
+        const { data: sug } = await supabase.from('suggestions').select('id, status').eq('id', suggestionId).maybeSingle();
+        if (!sug || sug.status !== 'open') return bad('La sugerencia ya no está abierta.');
+
+        const { error } = await supabase
+          .from('suggestion_responses')
+          .insert({ suggestion_id: suggestionId, responder_name: name });
+        if (error) {
+          const msg = (error.message || '').toLowerCase();
+          return bad(msg.includes('duplicate') || msg.includes('unique')
+            ? 'Ese nombre ya se sumó a esta sugerencia.'
+            : `No se pudo sumar: ${error.message}`);
+        }
+      } else {
+        const { error } = await supabase
+          .from('suggestion_responses')
+          .delete()
+          .eq('suggestion_id', suggestionId)
+          .ilike('responder_name', name);
+        if (error) return bad(`No se pudo salir: ${error.message}`);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'joinAlternative' || action === 'leaveAlternative') {
+      const alternativeId = Number(body.alternativeId);
+      const name = cleanName(body.name);
+      if (!alternativeId || !name) return bad('Elegí tu jugador en Ranking o escribí tu nombre.');
+
+      if (action === 'joinAlternative') {
+        const { data: alt } = await supabase
+          .from('suggestion_alternatives')
+          .select('id')
+          .eq('id', alternativeId)
+          .maybeSingle();
+        if (!alt) return bad('No se encontró la opción.');
+
+        const { error } = await supabase
+          .from('suggestion_alternative_joiners')
+          .insert({ alternative_id: alternativeId, responder_name: name });
+        if (error) {
+          const msg = (error.message || '').toLowerCase();
+          return bad(msg.includes('duplicate') || msg.includes('unique')
+            ? 'Ese nombre ya se sumó a esta opción.'
+            : `No se pudo sumar a la opción: ${error.message}`);
+        }
+      } else {
+        const { error } = await supabase
+          .from('suggestion_alternative_joiners')
+          .delete()
+          .eq('alternative_id', alternativeId)
+          .ilike('responder_name', name);
+        if (error) return bad(`No se pudo salir de la opción: ${error.message}`);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     if (action === 'submitMatch') {
       const {
         match_date,
@@ -475,6 +756,166 @@ export async function POST(req: Request) {
       }
 
       return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'closeSuggestion') {
+      const { error } = await supabase
+        .from('suggestions')
+        .update({ status: 'resolved' })
+        .eq('id', Number(body.suggestionId));
+      if (error) return bad(`No se pudo cerrar la sugerencia: ${error.message}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'markSuggestionNotAvailable') {
+      const { error } = await supabase
+        .from('suggestions')
+        .update({
+          booking_status: 'not_available',
+          admin_response_type: 'not_available',
+          admin_response_message: null,
+          admin_responded_at: new Date().toISOString(),
+        })
+        .eq('id', Number(body.suggestionId));
+      if (error) return bad(`No se pudo actualizar la sugerencia: ${error.message}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'saveSuggestionAlternatives') {
+      const suggestionId = Number(body.suggestionId);
+      const options: { date: string; time: string; label: string }[] = (Array.isArray(body.options) ? body.options : [])
+        .map((o: any) => ({
+          date: cleanDate(o?.date),
+          time: cleanTime(o?.time),
+          label: String(o?.label || '').trim().slice(0, 100),
+        }))
+        .filter((o: { date: string; time: string }) => o.date && o.time);
+
+      if (!suggestionId) return bad('Falta suggestionId');
+      if (options.length === 0) return bad('Cargá al menos una alternativa con fecha y hora.');
+
+      const { error: updateError } = await supabase
+        .from('suggestions')
+        .update({
+          admin_response_type: 'alternative_offered',
+          admin_response_message: String(body.message || '').trim().slice(0, 1000) || null,
+          admin_responded_at: new Date().toISOString(),
+          booking_status: 'open',
+        })
+        .eq('id', suggestionId);
+      if (updateError) return bad(`No se pudo guardar la respuesta admin: ${updateError.message}`);
+
+      const { error: deleteError } = await supabase
+        .from('suggestion_alternatives')
+        .delete()
+        .eq('suggestion_id', suggestionId);
+      if (deleteError) return bad(`No se pudieron actualizar las alternativas: ${deleteError.message}`);
+
+      const { error: insertError } = await supabase.from('suggestion_alternatives').insert(
+        options.map((o) => ({
+          suggestion_id: suggestionId,
+          alt_date: o.date,
+          alt_time: o.time,
+          alt_label: o.label || null,
+        }))
+      );
+      if (insertError) return bad(`No se pudieron guardar las alternativas: ${insertError.message}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'clearSuggestionAlternatives') {
+      const suggestionId = Number(body.suggestionId);
+      const { error: deleteError } = await supabase
+        .from('suggestion_alternatives')
+        .delete()
+        .eq('suggestion_id', suggestionId);
+      if (deleteError) return bad(`No se pudieron borrar las alternativas: ${deleteError.message}`);
+
+      const { error } = await supabase
+        .from('suggestions')
+        .update({ admin_response_type: null, admin_response_message: null, admin_responded_at: null })
+        .eq('id', suggestionId);
+      if (error) return bad(`No se pudo limpiar la respuesta admin: ${error.message}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'bookSuggestion') {
+      const suggestionId = Number(body.suggestionId);
+      const { data: sug, error: sugError } = await supabase
+        .from('suggestions')
+        .select('*')
+        .eq('id', suggestionId)
+        .maybeSingle();
+      if (sugError || !sug) return bad(`No se pudo leer la sugerencia: ${sugError?.message || 'no existe'}`);
+      if (!sug.is_booking_request) return bad('Esta acción es solo para sugerencias de sacar turno.');
+
+      const slotDate = cleanDate(sug.suggested_date);
+      const slotTime = cleanTime(sug.suggested_time);
+      if (!slotDate || !slotTime) return bad('La sugerencia no tiene fecha u hora válidas.');
+
+      const { data: responses, error: responsesError } = await supabase
+        .from('suggestion_responses')
+        .select('responder_name, created_at')
+        .eq('suggestion_id', suggestionId)
+        .order('created_at', { ascending: true });
+      if (responsesError) return bad(`No se pudieron leer los jugadores sumados: ${responsesError.message}`);
+
+      return await createSlotForSuggestion(
+        slotDate,
+        slotTime,
+        [sug.author_name, ...(responses || []).map((r) => r.responder_name)],
+        suggestionId,
+        {
+          booking_status: 'booked',
+          status: 'resolved',
+          admin_response_type: 'accepted',
+          admin_responded_at: new Date().toISOString(),
+        }
+      );
+    }
+
+    if (action === 'createSlotFromAlternative') {
+      const suggestionId = Number(body.suggestionId);
+      const alternativeId = Number(body.alternativeId);
+
+      const { data: sug } = await supabase.from('suggestions').select('*').eq('id', suggestionId).maybeSingle();
+      const { data: alt } = await supabase
+        .from('suggestion_alternatives')
+        .select('*')
+        .eq('id', alternativeId)
+        .eq('suggestion_id', suggestionId)
+        .maybeSingle();
+      if (!sug || !alt) return bad('No se encontró la sugerencia o la alternativa.');
+
+      const slotDate = cleanDate(alt.alt_date);
+      const slotTime = cleanTime(alt.alt_time);
+      if (!slotDate || !slotTime) return bad('La alternativa no tiene fecha u hora válidas.');
+
+      const { data: joiners, error: joinersError } = await supabase
+        .from('suggestion_alternative_joiners')
+        .select('responder_name, created_at')
+        .eq('alternative_id', alternativeId)
+        .order('created_at', { ascending: true });
+      if (joinersError) return bad(`No se pudieron leer los sumados: ${joinersError.message}`);
+
+      const altText = String(body.alternativeText || `${slotDate} ${slotTime}`).slice(0, 200);
+      const base = String(sug.admin_response_message || '').trim();
+
+      return await createSlotForSuggestion(
+        slotDate,
+        slotTime,
+        [sug.author_name, ...(joiners || []).map((j) => j.responder_name)],
+        suggestionId,
+        {
+          booking_status: 'booked',
+          status: 'resolved',
+          admin_response_type: 'accepted',
+          admin_response_message: base
+            ? `${base}\n\n✅ Se creó turno desde alternativa: ${altText}`
+            : `✅ Se creó turno desde alternativa: ${altText}`,
+          admin_responded_at: new Date().toISOString(),
+        }
+      );
     }
 
     if (action === 'noop') {

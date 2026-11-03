@@ -405,19 +405,12 @@ export default function TurnosTab({
     window.alert('Monto inválido.');
     return;
   }
-  const { createClient } = await import('@supabase/supabase-js');
-  const sb = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-  const { error } = await sb
-    .from('slots')
-    .update({ amount: parsed })
-    .eq('id', slot.id);
-  if (error) {
-    window.alert(`Error: ${error.message}`);
-    return;
-  }
+  const result = await adminAction({
+    action: 'updateSlotAmount',
+    slotId: slot.id,
+    amount: parsed,
+  });
+  if (!result.ok) return;
   await loadData();
 }}
                             style={secondaryButtonStyle}
