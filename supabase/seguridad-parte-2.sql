@@ -28,17 +28,16 @@ begin
   end loop;
 end $$;
 
--- ===== Opcional (decide AleBel): tablas que la app ya no escribe =====
--- Asado y Apuestas se sacaron de la app; quedan solo lectura sin tocar código.
--- do $$
--- declare t text;
--- begin
---   foreach t in array array['asado_rsvp', 'tournament_predictions'] loop
---     execute format('alter table public.%I enable row level security', t);
---     execute format('drop policy if exists "lectura publica" on public.%I', t);
---     execute format('create policy "lectura publica" on public.%I for select to anon, authenticated using (true)', t);
---   end loop;
--- end $$;
+-- 3) Asado y Apuestas (ya no están en la app): solo lectura
+do $$
+declare t text;
+begin
+  foreach t in array array['asado_rsvp', 'tournament_predictions'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists "lectura publica" on public.%I', t);
+    execute format('create policy "lectura publica" on public.%I for select to anon, authenticated using (true)', t);
+  end loop;
+end $$;
 
 -- ===== Vuelta atrás (si algo se rompe) =====
 -- create policy "admin can insert slots" on public.slots for insert to anon with check (true);
