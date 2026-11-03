@@ -184,8 +184,6 @@ export type TabKey =
   | 'historial'
   | 'actividad'
   | 'torneo'
-  | 'apuestas'
-  | 'asado'
   | 'copadeLeche'
   | 'torneoInteres';
 

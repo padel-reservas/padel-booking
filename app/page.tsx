@@ -15,8 +15,6 @@ import Image from 'next/image';
 import logoDisplay from './logo-display.png';
 import { APP_VERSION } from './lib/appVersion';
 import TorneoTab from './components/TorneoTab';
-import ApuestasTab from './components/ApuestasTab';
-import AsadoTab from './components/AsadoTab';
 import CopaDeLecheTab from './components/CopaDeLecheTab';
 import TorneoInteresTab from './components/TorneoInteresTab';
 import fotoFinalistas from './foto-finalistas.jpg';
@@ -185,7 +183,7 @@ function formatAlternativeLine(alt: SuggestionAlternative) {
 }
 
 export default function Page() {
-  const [activeTab, setActiveTab] = useState<TabKey>('torneo');
+  const [activeTab, setActiveTab] = useState<TabKey>('turnos');
 
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotPlayers, setSlotPlayers] = useState<SlotPlayer[]>([]);
@@ -2596,8 +2594,6 @@ export default function Page() {
           {tabButton('Historial', 'historial')}
           {tabButton('Actividad', 'actividad')}
           {tabButton('Torneo', 'torneo')}
-          {tabButton('Apuestas', 'apuestas')}
-          {tabButton('Asado', 'asado')}
           {tabButton('Copa de Leche', 'copadeLeche')}
           {tabButton('¿Jugás el torneo?', 'torneoInteres')}
           {canSeeAdmin && activeTab === 'turnos' && (
@@ -3800,20 +3796,6 @@ export default function Page() {
     adminPin={pin}
   />
 )}  
-      {!loading && activeTab === 'apuestas' && (
-  <ApuestasTab
-    rankingPlayers={rankingPlayers}
-    myPlayerName={myPlayerName}
-    adminUnlocked={adminUnlocked}
-  />
-)}
-      {!loading && activeTab === 'asado' && (
-  <AsadoTab
-    rankingPlayers={rankingPlayers}
-    myPlayerName={myPlayerName}
-    adminUnlocked={adminUnlocked}
-  />
-)}
       {!loading && activeTab === 'copadeLeche' && (
   <CopaDeLecheTab
     rankingPlayers={rankingPlayers}
