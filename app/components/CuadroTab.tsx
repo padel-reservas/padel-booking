@@ -145,7 +145,7 @@ export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: 
       drawBracketImage(canvas, { pairs, matches });
       const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
       if (!blob) throw new Error('No se pudo generar la imagen');
-      const file = new File([blob], 'cuadro-torneo.png', { type: 'image/png' });
+      const file = new File([blob], 'torneo-fall-26.png', { type: 'image/png' });
       const nav = navigator as Navigator & { canShare?: (data: any) => boolean };
       if (nav.share && nav.canShare && nav.canShare({ files: [file] })) {
         await nav.share({ files: [file], title: KO_TITLE });
@@ -153,7 +153,7 @@ export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: 
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'cuadro-torneo.png';
+        a.download = 'torneo-fall-26.png';
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 2000);
       }

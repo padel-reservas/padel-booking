@@ -2214,7 +2214,7 @@ export default function Page() {
           </button>
 
           {tabButton('Turnos', 'turnos')}
-          {tabButton('🏆 Torneo Nov', 'cuadro')}
+          {tabButton("🏆 Torneo Fall 26'", 'cuadro')}
           {tabButton('Sugerencias', 'sugerencias')}
           {tabButton('Ranking', 'ranking')}
           {tabButton('Duelo', 'duelo')}

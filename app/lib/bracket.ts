@@ -1,7 +1,7 @@
 // Torneo eliminación simple (noviembre 2026): tipos, rondas y dibujo del cuadro.
 
 export const KO_TOURNAMENT_KEY = 'torneo-2026-11';
-export const KO_TITLE = 'Torneo de Pádel — Noviembre 2026';
+export const KO_TITLE = "Torneo Fall 26'";
 
 export const KO_ROUNDS = [
   { round: 1, name: 'Octavos', window: 'lun 9/11 – dom 15/11' },
