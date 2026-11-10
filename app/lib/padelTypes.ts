@@ -4,6 +4,7 @@ export type Slot = {
   time: string;
   amount: number | null;
   tournament_group: string | null;
+  ko_match_id?: number | null;
 };
 
 export type PaymentMethod = 'venmo' | 'zelle';

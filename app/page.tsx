@@ -781,6 +781,7 @@ export default function Page() {
         match,
         amount: (s as any).amount ?? null,
         tournament_group: (s as any).tournament_group ?? null,
+        ko_match_id: (s as any).ko_match_id ?? null,
       };
     });
   }, [slots, slotPlayers, slotMatchMap]);

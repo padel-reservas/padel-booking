@@ -150,6 +150,66 @@ async function koSetNextSlot(match: { tournament_key: string; round: number; slo
   return error;
 }
 
+const KO_MULTIPLIER: Record<number, number> = { 1: 1.5, 2: 2.0, 3: 2.5, 4: 3.0 };
+const KO_ROUND_NAME: Record<number, string> = { 1: 'Octavos', 2: 'Cuartos', 3: 'Semis', 4: 'Final' };
+
+type KoSets = {
+  s1p1: number; s1p2: number;
+  s2p1: number; s2p2: number;
+  s3p1: number | null; s3p2: number | null;
+};
+
+// Guarda el resultado en el cuadro (sets orientados a pareja 1 / pareja 2) y avanza al ganador
+async function koSaveBracketResult(match: any, sets: KoSets, winnerPairId: number, submittedBy: string) {
+  const { data: updated, error } = await supabase
+    .from('ko_matches')
+    .update({
+      set1_pair1: sets.s1p1, set1_pair2: sets.s1p2,
+      set2_pair1: sets.s2p1, set2_pair2: sets.s2p2,
+      set3_pair1: sets.s3p1, set3_pair2: sets.s3p2,
+      winner_pair_id: winnerPairId,
+      walkover: false,
+      status: 'played',
+      played_at: new Date().toISOString(),
+      submitted_by: submittedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', match.id)
+    .eq('status', 'pending')
+    .select('id');
+  if (error) return `No se pudo guardar el resultado en el cuadro: ${error.message}`;
+  if (!updated || updated.length === 0) return 'Este partido del torneo ya tiene resultado.';
+
+  const advanceError = await koSetNextSlot(match, winnerPairId);
+  if (advanceError) return `Se guardó el resultado pero no se pudo avanzar al ganador: ${advanceError.message}`;
+  return null;
+}
+
+// Parejas del partido con sus ids del ranking
+async function koMatchPairsWithRanking(match: any) {
+  const { data: pairs } = await supabase
+    .from('ko_pairs')
+    .select('id, player1_name, player2_name')
+    .in('id', [match.pair1_id, match.pair2_id]);
+  const pair1 = (pairs || []).find((p) => p.id === match.pair1_id);
+  const pair2 = (pairs || []).find((p) => p.id === match.pair2_id);
+  if (!pair1 || !pair2) return { error: 'No se encontraron las parejas del partido.' } as const;
+
+  const names = [pair1.player1_name, pair1.player2_name, pair2.player1_name, pair2.player2_name];
+  const { data: ranking } = await supabase.from('ranking_players').select('id, name');
+  const idOf = (n: string) => (ranking || []).find((r) => sameName(r.name, n))?.id ?? null;
+  const ids = names.map(idOf);
+  if (ids.some((id) => !id)) {
+    const missing = names.filter((_, i) => !ids[i]).join(', ');
+    return { error: `No están en el ranking: ${missing}` } as const;
+  }
+  return {
+    pair1, pair2,
+    pair1Ids: [ids[0]!, ids[1]!],
+    pair2Ids: [ids[2]!, ids[3]!],
+  } as const;
+}
+
 async function koNextMatchPlayed(match: { tournament_key: string; round: number; slot: number }) {
   if (match.round >= 4) return false;
   const { data } = await supabase
@@ -666,25 +726,51 @@ export async function POST(req: Request) {
       }
 
       const winnerPairId = w1 > w2 ? match.pair1_id : match.pair2_id;
-      const { error } = await supabase
-        .from('ko_matches')
-        .update({
-          set1_pair1: s1p1, set1_pair2: s1p2,
-          set2_pair1: s2p1, set2_pair2: s2p2,
-          set3_pair1: s3p1, set3_pair2: s3p2,
-          winner_pair_id: winnerPairId,
-          walkover: false,
-          status: 'played',
-          played_at: new Date().toISOString(),
-          submitted_by: isAdmin ? 'admin' : cleanName(body.submittedByName),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', matchId)
-        .eq('status', 'pending');
-      if (error) return bad(`No se pudo guardar el resultado: ${error.message}`);
+      const ranking = await koMatchPairsWithRanking(match);
+      if ('error' in ranking) return bad(ranking.error as string);
 
-      const advanceError = await koSetNextSlot(match, winnerPairId);
-      if (advanceError) return bad(`Se guardó el resultado pero no se pudo avanzar al ganador: ${advanceError.message}`);
+      // Si el partido está vinculado a un turno, el resultado queda también en ese turno
+      const { data: linkedSlot } = await supabase
+        .from('slots')
+        .select('id, date, time')
+        .eq('ko_match_id', match.id)
+        .order('date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (linkedSlot) {
+        const { data: slotResult } = await supabase.from('matches').select('id').eq('slot_id', linkedSlot.id).maybeSingle();
+        if (slotResult) return bad('El turno de este partido ya tiene un resultado cargado.');
+      }
+
+      const sets: KoSets = { s1p1, s1p2, s2p1, s2p2, s3p1, s3p2 };
+      const bracketError = await koSaveBracketResult(
+        match, sets, winnerPairId, isAdmin ? 'admin' : cleanName(body.submittedByName)
+      );
+      if (bracketError) return bad(bracketError);
+
+      const { error: rankingError } = await supabase.from('matches').insert({
+        match_date: linkedSlot?.date || new Date().toISOString().slice(0, 10),
+        match_time: linkedSlot?.time || null,
+        slot_id: linkedSlot?.id || null,
+        team_a_player_1_id: ranking.pair1Ids[0],
+        team_a_player_2_id: ranking.pair1Ids[1],
+        team_b_player_1_id: ranking.pair2Ids[0],
+        team_b_player_2_id: ranking.pair2Ids[1],
+        set1_a: s1p1, set1_b: s1p2,
+        set2_a: s2p1, set2_b: s2p2,
+        set3_a: s3p1, set3_b: s3p2,
+        winner_team: winnerPairId === match.pair1_id ? 'A' : 'B',
+        source: 'torneo',
+        tournament_multiplier: KO_MULTIPLIER[match.round] ?? 1.5,
+        notes: `Torneo Fall '26 — ${KO_ROUND_NAME[match.round] || ''}`,
+        submitted_at: new Date().toISOString(),
+        ko_match_id: match.id,
+      });
+      if (rankingError) {
+        return bad(`Se guardó en el cuadro, pero no se pudo sumar al ranking: ${rankingError.message}`);
+      }
+
+      await runRecalculateRankings();
       return NextResponse.json({ ok: true });
     }
 
@@ -745,6 +831,36 @@ export async function POST(req: Request) {
 
       const tournamentGroup = slotData?.tournament_group ?? null;
 
+      // Turno vinculado a un partido del Torneo Fall '26
+      const { data: slotKo } = await supabase.from('slots').select('ko_match_id').eq('id', slot_id).maybeSingle();
+      let koLink: { match: any; swapped: boolean } | null = null;
+      if (slotKo?.ko_match_id) {
+        const { data: koMatch } = await supabase.from('ko_matches').select('*').eq('id', slotKo.ko_match_id).maybeSingle();
+        if (!koMatch) return bad('No se encontró el partido del torneo vinculado a este turno.');
+        if (koMatch.status !== 'pending') {
+          return bad('Este partido del torneo ya tiene resultado cargado (en el tab del torneo).');
+        }
+        if (!koMatch.pair1_id || !koMatch.pair2_id) return bad('El partido del torneo todavía no tiene las dos parejas.');
+
+        const koRanking = await koMatchPairsWithRanking(koMatch);
+        if ('error' in koRanking) return bad(koRanking.error as string);
+
+        const sameTeam = (team: unknown[], ids: readonly number[]) =>
+          team.length === 2 && ids.every((id) => team.map(Number).includes(id));
+        const teamA = [team_a_player_1_id, team_a_player_2_id];
+        const teamB = [team_b_player_1_id, team_b_player_2_id];
+        const normal = sameTeam(teamA, koRanking.pair1Ids) && sameTeam(teamB, koRanking.pair2Ids);
+        const swapped = sameTeam(teamA, koRanking.pair2Ids) && sameTeam(teamB, koRanking.pair1Ids);
+        if (!normal && !swapped) {
+          return bad(
+            `Las parejas no coinciden con el partido del torneo: ` +
+              `${koRanking.pair1.player1_name}/${koRanking.pair1.player2_name} vs ` +
+              `${koRanking.pair2.player1_name}/${koRanking.pair2.player2_name}.`
+          );
+        }
+        koLink = { match: koMatch, swapped };
+      }
+
       const multiplierMap: Record<string, number> = {
         QF: 2.0,
         SF: 2.5,
@@ -757,8 +873,10 @@ export async function POST(req: Request) {
         D: 1.5,
       };
 
-      const tournamentMultiplier = tournamentGroup ? (multiplierMap[tournamentGroup] ?? 1.0) : 1.0;
-      const matchSource = tournamentGroup ? 'torneo' : (source || 'slot');
+      const tournamentMultiplier = koLink
+        ? KO_MULTIPLIER[koLink.match.round] ?? 1.5
+        : tournamentGroup ? (multiplierMap[tournamentGroup] ?? 1.0) : 1.0;
+      const matchSource = koLink || tournamentGroup ? 'torneo' : (source || 'slot');
 
       const payload = {
         match_date,
@@ -776,10 +894,11 @@ export async function POST(req: Request) {
         set3_b,
         winner_team,
         source: matchSource,
-        notes: notes || null,
+        notes: notes || (koLink ? `Torneo Fall '26 — ${KO_ROUND_NAME[koLink.match.round] || ''}` : null),
         submitted_by_player_id,
         submitted_at: new Date().toISOString(),
         tournament_multiplier: tournamentMultiplier,
+        ko_match_id: koLink ? koLink.match.id : null,
       };
 
       const { error } = await supabase.from('matches').insert(payload);
@@ -789,6 +908,24 @@ export async function POST(req: Request) {
       }
 
       await runRecalculateRankings();
+
+      if (koLink) {
+        const n = (v: unknown) => (v === null || v === undefined || v === '' ? null : Number(v));
+        const a = { s1: n(set1_a), s2: n(set2_a), s3: n(set3_a) };
+        const b = { s1: n(set1_b), s2: n(set2_b), s3: n(set3_b) };
+        const p1 = koLink.swapped ? b : a;
+        const p2 = koLink.swapped ? a : b;
+        const teamAWon = winner_team === 'A';
+        const pair1Won = koLink.swapped ? !teamAWon : teamAWon;
+        const bracketError = await koSaveBracketResult(
+          koLink.match,
+          { s1p1: p1.s1 ?? 0, s1p2: p2.s1 ?? 0, s2p1: p1.s2 ?? 0, s2p2: p2.s2 ?? 0, s3p1: p1.s3, s3p2: p2.s3 },
+          pair1Won ? koLink.match.pair1_id : koLink.match.pair2_id,
+          `turno ${slot_id}`
+        );
+        if (bracketError) return bad(`Se guardó el resultado en el ranking, pero no en el cuadro: ${bracketError}`);
+      }
+
       return NextResponse.json({ ok: true, mode: 'submitted' });
     }
 
@@ -1057,6 +1194,14 @@ export async function POST(req: Request) {
 
       const advanceError = await koSetNextSlot(match, null);
       if (advanceError) return bad(advanceError.message);
+
+      const { data: removed, error: removeError } = await supabase
+        .from('matches')
+        .delete()
+        .eq('ko_match_id', matchId)
+        .select('id');
+      if (removeError) return bad(`Se borró del cuadro, pero no del ranking: ${removeError.message}`);
+      if (removed && removed.length > 0) await runRecalculateRankings();
       return NextResponse.json({ ok: true });
     }
 
@@ -1319,6 +1464,19 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'updateSlotKoMatch') {
+      const slotId = Number(body.slotId);
+      const koMatchId = body.koMatchId ? Number(body.koMatchId) : null;
+      if (!slotId) return bad('Falta slotId');
+      if (koMatchId) {
+        const { data: ko } = await supabase.from('ko_matches').select('id').eq('id', koMatchId).maybeSingle();
+        if (!ko) return bad('No se encontró el partido del torneo.');
+      }
+      const { error } = await supabase.from('slots').update({ ko_match_id: koMatchId }).eq('id', slotId);
+      if (error) return bad(error.message);
       return NextResponse.json({ ok: true });
     }
 

@@ -1,6 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { KO_ROUNDS, KO_TOURNAMENT_KEY, type KoMatch, type KoPair } from '../lib/bracket';
 import type {
   Match,
   RankingPlayer,
@@ -11,12 +13,18 @@ import { formatDate, playerNameById } from '../lib/padelUtils';
 
 const MAX_PLAYERS = 4;
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
 type SlotWithPlayers = {
   id: number;
   date: string;
   time: string;
   amount: number | null;
   tournament_group: string | null;
+  ko_match_id?: number | null;
   allPlayers: SlotPlayerWithPaymentUI[];
   activePlayers: SlotPlayerWithPaymentUI[];
   waitlistPlayers: SlotPlayerWithPaymentUI[];
@@ -217,6 +225,37 @@ export default function TurnosTab({
   rejectPayment,
   sendWhatsAppReminder,
 }: Props) {
+  const [koPairs, setKoPairs] = useState<KoPair[]>([]);
+  const [koMatches, setKoMatches] = useState<KoMatch[]>([]);
+  const [koPickerFor, setKoPickerFor] = useState<number | null>(null);
+
+  const loadKo = useCallback(async () => {
+    const [p, m] = await Promise.all([
+      supabase.from('ko_pairs').select('*').eq('tournament_key', KO_TOURNAMENT_KEY),
+      supabase.from('ko_matches').select('*').eq('tournament_key', KO_TOURNAMENT_KEY).order('round').order('slot'),
+    ]);
+    if (!p.error) setKoPairs((p.data || []) as KoPair[]);
+    if (!m.error) setKoMatches((m.data || []) as KoMatch[]);
+  }, []);
+
+  useEffect(() => {
+    loadKo();
+  }, [loadKo, groupedSlots]);
+
+  const koPairById = useMemo(() => new Map(koPairs.map((p) => [p.id, p])), [koPairs]);
+  const koShortPair = (id: number | null) => {
+    const p = id ? koPairById.get(id) : null;
+    return p ? `${p.player1_name}/${p.player2_name}` : 'Por definir';
+  };
+  const koMatchLabel = (m: KoMatch) =>
+    `${KO_ROUNDS.find((r) => r.round === m.round)?.name || ''}: ${koShortPair(m.pair1_id)} vs ${koShortPair(m.pair2_id)}`;
+
+  async function linkSlotToKo(slotId: number, koMatchId: number | null) {
+    const result = await adminAction({ action: 'updateSlotKoMatch', slotId, koMatchId });
+    setKoPickerFor(null);
+    if (result.ok) await loadData();
+  }
+
   return (
     <>
       {Object.keys(groupedSlots).length === 0 && (
@@ -291,6 +330,15 @@ export default function TurnosTab({
                           💵 ${slot.amount} por jugador
                         </div>
                       )}
+
+                      {slot.ko_match_id && (() => {
+                        const km = koMatches.find((m) => m.id === slot.ko_match_id);
+                        return km ? (
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#7e22ce', marginTop: 6 }}>
+                            {koShortPair(km.pair1_id)} vs {koShortPair(km.pair2_id)}
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
 
                     <div
@@ -302,6 +350,26 @@ export default function TurnosTab({
                         justifyContent: 'flex-end',
                       }}
                     >
+                      {slot.ko_match_id && (() => {
+                        const km = koMatches.find((m) => m.id === slot.ko_match_id);
+                        return (
+                          <div
+                            title={km ? koMatchLabel(km) : ''}
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: 999,
+                              background: '#fdf4ff',
+                              color: '#7e22ce',
+                              fontWeight: 700,
+                              fontSize: 12,
+                              border: '1px solid #e9d5ff',
+                            }}
+                          >
+                            🏆 Fall '26{km ? ` — ${KO_ROUNDS.find((r) => r.round === km.round)?.name}` : ''}
+                          </div>
+                        );
+                      })()}
+
                       {slot.tournament_group && (
                         <div
                           style={{
@@ -419,23 +487,39 @@ export default function TurnosTab({
                           </button>
 
                           <button
-                            onClick={async () => {
-                              const input = window.prompt(
-                                'Grupo del torneo (A, B, C, D) o dejá vacío para quitar:',
-                                slot.tournament_group || ''
-                              );
-                              if (input === null) return;
-                              const result = await adminAction({
-                                action: 'updateSlotTournament',
-                                slotId: slot.id,
-                                tournament_group: input.trim().toUpperCase() || null,
-                              });
-                            if (result.ok) await loadData();
-                            }}
+                            onClick={() => setKoPickerFor(koPickerFor === slot.id ? null : slot.id)}
                             style={secondaryButtonStyle}
                           >
-                            {slot.tournament_group ? `🏆 Grupo ${slot.tournament_group}` : 'Marcar torneo'}
+                            {slot.ko_match_id ? "🏆 Fall '26" : 'Marcar torneo'}
                           </button>
+
+                          {koPickerFor === slot.id && (
+                            <select
+                              autoFocus
+                              value={slot.ko_match_id ?? ''}
+                              onChange={(e) => linkSlotToKo(slot.id, e.target.value ? Number(e.target.value) : null)}
+                              style={{
+                                padding: '8px 10px',
+                                borderRadius: 10,
+                                border: '1px solid #c084fc',
+                                fontSize: 14,
+                                maxWidth: '100%',
+                              }}
+                            >
+                              <option value="">— Sin torneo —</option>
+                              {koMatches
+                                .filter(
+                                  (m) =>
+                                    m.id === slot.ko_match_id ||
+                                    (m.status === 'pending' && m.pair1_id && m.pair2_id)
+                                )
+                                .map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    {koMatchLabel(m)}
+                                  </option>
+                                ))}
+                            </select>
+                          )}
 
                           <button
                             onClick={() =>

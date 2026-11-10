@@ -53,6 +53,7 @@ function sameName(a: string, b: string) {
 export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: Props) {
   const [pairs, setPairs] = useState<KoPair[]>([]);
   const [matches, setMatches] = useState<KoMatch[]>([]);
+  const [linkedSlots, setLinkedSlots] = useState<{ id: number; date: string; time: string; ko_match_id: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openForm, setOpenForm] = useState<number | null>(null);
@@ -63,10 +64,12 @@ export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: 
   const previewRef = useRef<HTMLCanvasElement | null>(null);
 
   const loadData = useCallback(async () => {
-    const [pairsRes, matchesRes] = await Promise.all([
+    const [pairsRes, matchesRes, slotsRes] = await Promise.all([
       supabase.from('ko_pairs').select('*').eq('tournament_key', KO_TOURNAMENT_KEY).order('seed'),
       supabase.from('ko_matches').select('*').eq('tournament_key', KO_TOURNAMENT_KEY).order('round').order('slot'),
+      supabase.from('slots').select('id, date, time, ko_match_id').not('ko_match_id', 'is', null),
     ]);
+    if (!slotsRes.error) setLinkedSlots((slotsRes.data || []) as any);
     if (pairsRes.error || matchesRes.error) {
       setLoadError(pairsRes.error?.message || matchesRes.error?.message || 'error');
       setLoading(false);
@@ -253,6 +256,18 @@ export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: 
         ) : (
           renderPairLine(m, 2)
         )}
+
+        {(() => {
+          const sl = linkedSlots.find((x) => x.ko_match_id === m.id);
+          if (!sl || m.status === 'played') return null;
+          const d = new Date(`${sl.date}T12:00:00`);
+          const day = d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'numeric' });
+          return (
+            <div style={{ padding: '6px 10px', borderTop: '1px solid #f1f5f9', fontSize: 13, color: '#7e22ce', fontWeight: 700 }}>
+              📅 Turno: {day} · {String(sl.time).slice(0, 5)}
+            </div>
+          );
+        })()}
 
         {!m.is_bye && (canLoad || (adminUnlocked && m.status === 'played')) && openForm !== m.id && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '8px 10px', borderTop: '1px solid #f1f5f9' }}>
