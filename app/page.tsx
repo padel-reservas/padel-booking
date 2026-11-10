@@ -54,6 +54,8 @@ import {
 } from './lib/padelUtils';
 
 const MAX_PLAYERS = 4;
+// El tab del Torneo Fall '26 aparece para todos a esta hora (admin lo ve antes)
+const CUADRO_VISIBLE_FROM = new Date('2026-11-09T22:00:00-05:00').getTime();
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -185,6 +187,14 @@ function formatAlternativeLine(alt: SuggestionAlternative) {
 
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabKey>('turnos');
+  const [cuadroVisible, setCuadroVisible] = useState(false);
+
+  useEffect(() => {
+    const check = () => setCuadroVisible(Date.now() >= CUADRO_VISIBLE_FROM);
+    check();
+    const timer = setInterval(check, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotPlayers, setSlotPlayers] = useState<SlotPlayer[]>([]);
@@ -2214,7 +2224,7 @@ export default function Page() {
           </button>
 
           {tabButton('Turnos', 'turnos')}
-          {tabButton("🏆 Torneo Fall '26", 'cuadro')}
+          {(cuadroVisible || adminUnlocked) && tabButton("🏆 Torneo Fall '26", 'cuadro')}
           {tabButton('Sugerencias', 'sugerencias')}
           {tabButton('Ranking', 'ranking')}
           {tabButton('Duelo', 'duelo')}
