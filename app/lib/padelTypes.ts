@@ -178,6 +178,7 @@ export type PlayerRatingHistoryPoint = {
 
 export type TabKey =
   | 'turnos'
+  | 'cuadro'
   | 'sugerencias'
   | 'ranking'
   | 'duelo'

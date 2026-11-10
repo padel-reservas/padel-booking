@@ -17,6 +17,7 @@ import { APP_VERSION } from './lib/appVersion';
 import TorneoTab from './components/TorneoTab';
 import CopaDeLecheTab from './components/CopaDeLecheTab';
 import TorneoInteresTab from './components/TorneoInteresTab';
+import CuadroTab from './components/CuadroTab';
 import fotoFinalistas from './foto-finalistas.jpg';
 
 
@@ -2213,6 +2214,7 @@ export default function Page() {
           </button>
 
           {tabButton('Turnos', 'turnos')}
+          {tabButton('🏆 Torneo Nov', 'cuadro')}
           {tabButton('Sugerencias', 'sugerencias')}
           {tabButton('Ranking', 'ranking')}
           {tabButton('Duelo', 'duelo')}
@@ -3426,6 +3428,13 @@ export default function Page() {
     rankingPlayers={rankingPlayers}
     myPlayerName={myPlayerName}
     adminUnlocked={adminUnlocked}
+  />
+)}
+      {!loading && activeTab === 'cuadro' && (
+  <CuadroTab
+    myPlayerName={myPlayerName}
+    adminUnlocked={adminUnlocked}
+    adminAction={adminAction}
   />
 )}
       {!loading && activeTab === 'torneoInteres' && (

@@ -136,6 +136,32 @@ async function createSlotForSuggestion(
   return NextResponse.json({ ok: true, slotId: createdSlot.id });
 }
 
+// ===== Cuadro eliminación simple =====
+// Pasa al ganador a la ronda siguiente (o lo saca, si winnerPairId es null)
+async function koSetNextSlot(match: { tournament_key: string; round: number; slot: number }, winnerPairId: number | null) {
+  if (match.round >= 4) return null;
+  const field = match.slot % 2 === 0 ? 'pair1_id' : 'pair2_id';
+  const { error } = await supabase
+    .from('ko_matches')
+    .update({ [field]: winnerPairId, updated_at: new Date().toISOString() })
+    .eq('tournament_key', match.tournament_key)
+    .eq('round', match.round + 1)
+    .eq('slot', Math.floor(match.slot / 2));
+  return error;
+}
+
+async function koNextMatchPlayed(match: { tournament_key: string; round: number; slot: number }) {
+  if (match.round >= 4) return false;
+  const { data } = await supabase
+    .from('ko_matches')
+    .select('status')
+    .eq('tournament_key', match.tournament_key)
+    .eq('round', match.round + 1)
+    .eq('slot', Math.floor(match.slot / 2))
+    .maybeSingle();
+  return data?.status === 'played';
+}
+
 function normalizePaymentMethod(raw: unknown): 'venmo' | 'zelle' | null {
   const value = String(raw || '')
     .trim()
@@ -601,6 +627,67 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'submitKoResult') {
+      const matchId = Number(body.matchId);
+      const isAdmin = !!pin && pin === adminPin;
+
+      const { data: match } = await supabase.from('ko_matches').select('*').eq('id', matchId).maybeSingle();
+      if (!match) return bad('No se encontró el partido.');
+      if (match.status !== 'pending') return bad('Este partido ya tiene resultado.');
+      if (!match.pair1_id || !match.pair2_id) return bad('Todavía no están definidas las dos parejas.');
+
+      const { data: pairs } = await supabase
+        .from('ko_pairs')
+        .select('id, player1_name, player2_name')
+        .in('id', [match.pair1_id, match.pair2_id]);
+      const names = (pairs || []).flatMap((p) => [p.player1_name, p.player2_name]);
+      if (!isAdmin && !names.some((n) => sameName(n, body.submittedByName))) {
+        return bad('Solo los jugadores del partido o el admin pueden cargar el resultado.', 403);
+      }
+
+      const toInt = (v: unknown) => (v === null || v === undefined || v === '' ? NaN : parseInt(String(v), 10));
+      const validSet = (n: number) => Number.isInteger(n) && n >= 0 && n <= 99;
+      const s1p1 = toInt(body.set1p1), s1p2 = toInt(body.set1p2);
+      const s2p1 = toInt(body.set2p1), s2p2 = toInt(body.set2p2);
+      let s3p1: number | null = toInt(body.set3p1), s3p2: number | null = toInt(body.set3p2);
+
+      if (![s1p1, s1p2, s2p1, s2p2].every(validSet)) return bad('Cargá al menos los primeros 2 sets.');
+      if (s1p1 === s1p2 || s2p1 === s2p2) return bad('Un set no puede terminar empatado.');
+
+      let w1 = 0, w2 = 0;
+      if (s1p1 > s1p2) w1++; else w2++;
+      if (s2p1 > s2p2) w1++; else w2++;
+      if (w1 === 1 && w2 === 1) {
+        if (!validSet(s3p1) || !validSet(s3p2) || s3p1 === s3p2) return bad('Hay empate en sets, cargá el 3er set.');
+        if (s3p1 > s3p2) w1++; else w2++;
+      } else {
+        s3p1 = null;
+        s3p2 = null;
+      }
+
+      const winnerPairId = w1 > w2 ? match.pair1_id : match.pair2_id;
+      const { error } = await supabase
+        .from('ko_matches')
+        .update({
+          set1_pair1: s1p1, set1_pair2: s1p2,
+          set2_pair1: s2p1, set2_pair2: s2p2,
+          set3_pair1: s3p1, set3_pair2: s3p2,
+          winner_pair_id: winnerPairId,
+          walkover: false,
+          status: 'played',
+          played_at: new Date().toISOString(),
+          submitted_by: isAdmin ? 'admin' : cleanName(body.submittedByName),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', matchId)
+        .eq('status', 'pending');
+      if (error) return bad(`No se pudo guardar el resultado: ${error.message}`);
+
+      const advanceError = await koSetNextSlot(match, winnerPairId);
+      if (advanceError) return bad(`Se guardó el resultado pero no se pudo avanzar al ganador: ${advanceError.message}`);
+      return NextResponse.json({ ok: true });
+    }
+
     if (action === 'submitMatch') {
       const {
         match_date,
@@ -916,6 +1003,61 @@ export async function POST(req: Request) {
           admin_responded_at: new Date().toISOString(),
         }
       );
+    }
+
+    if (action === 'koWalkover') {
+      const matchId = Number(body.matchId);
+      const winnerPairId = Number(body.winnerPairId);
+      const { data: match } = await supabase.from('ko_matches').select('*').eq('id', matchId).maybeSingle();
+      if (!match) return bad('No se encontró el partido.');
+      if (match.status !== 'pending') return bad('Este partido ya tiene resultado. Borralo primero.');
+      if (![match.pair1_id, match.pair2_id].includes(winnerPairId)) return bad('La pareja ganadora no juega este partido.');
+
+      const { error } = await supabase
+        .from('ko_matches')
+        .update({
+          set1_pair1: null, set1_pair2: null, set2_pair1: null, set2_pair2: null, set3_pair1: null, set3_pair2: null,
+          winner_pair_id: winnerPairId,
+          walkover: true,
+          status: 'played',
+          played_at: new Date().toISOString(),
+          submitted_by: 'admin',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', matchId);
+      if (error) return bad(error.message);
+
+      const advanceError = await koSetNextSlot(match, winnerPairId);
+      if (advanceError) return bad(advanceError.message);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'koClearResult') {
+      const matchId = Number(body.matchId);
+      const { data: match } = await supabase.from('ko_matches').select('*').eq('id', matchId).maybeSingle();
+      if (!match) return bad('No se encontró el partido.');
+      if (match.status !== 'played') return bad('Este partido no tiene resultado.');
+      if (await koNextMatchPlayed(match)) {
+        return bad('El partido siguiente ya se jugó. Borrá primero ese resultado.');
+      }
+
+      const { error } = await supabase
+        .from('ko_matches')
+        .update({
+          set1_pair1: null, set1_pair2: null, set2_pair1: null, set2_pair2: null, set3_pair1: null, set3_pair2: null,
+          winner_pair_id: null,
+          walkover: false,
+          status: 'pending',
+          played_at: null,
+          submitted_by: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', matchId);
+      if (error) return bad(error.message);
+
+      const advanceError = await koSetNextSlot(match, null);
+      if (advanceError) return bad(advanceError.message);
+      return NextResponse.json({ ok: true });
     }
 
     if (action === 'noop') {
