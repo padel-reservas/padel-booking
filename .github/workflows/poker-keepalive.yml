@@ -1,0 +1,25 @@
+# Mantiene activa la base de Supabase de la app de poker (poker-greenwich-club).
+# Supabase pausa los proyectos gratis tras ~7 días sin actividad; esta tarea
+# hace una lectura cada 3 días. No toca nada de la app de pádel.
+name: Poker keep-alive
+
+on:
+  schedule:
+    - cron: "23 15 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Leer la base del poker
+        run: |
+          set -euo pipefail
+          cfg=$(curl -fsS --retry 3 https://poker-greenwich-club.vercel.app/api/config)
+          url=$(echo "$cfg" | jq -r .url)
+          key=$(echo "$cfg" | jq -r .anonKey)
+          code=$(curl -sS -o /tmp/out -w '%{http_code}' --retry 3 \
+            -H "apikey: $key" "$url/rest/v1/poker_games?select=id&limit=1")
+          echo "HTTP $code"; cat /tmp/out; echo
+          test "$code" = "200"
