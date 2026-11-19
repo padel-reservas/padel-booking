@@ -79,6 +79,26 @@ function bad(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
+// Evita propuestas duplicadas: mismo día/hora que otra propuesta abierta o que un turno ya armado
+async function checkProposalConflicts(date: string, time: string, ignoreSuggestionId: number | null) {
+  const { data: openProposals } = await supabase
+    .from('suggestions')
+    .select('id, suggested_time')
+    .eq('status', 'open')
+    .eq('is_booking_request', true)
+    .eq('suggested_date', date);
+  const dup = (openProposals || []).find(
+    (p) => p.id !== ignoreSuggestionId && cleanTime(p.suggested_time) === time
+  );
+  if (dup) return 'Ya hay una propuesta para ese día y hora: sumate ahí.';
+
+  const { data: slots } = await supabase.from('slots').select('id, time').eq('date', date);
+  if ((slots || []).some((sl) => cleanTime(sl.time) === time)) {
+    return 'Ya hay un turno armado a esa hora: anotate en la pestaña Turnos.';
+  }
+  return null;
+}
+
 // Crea un turno con jugadores y marca la sugerencia como resuelta (lo usan "Turno sacado" y "crear desde alternativa")
 async function createSlotForSuggestion(
   slotDate: string,
@@ -568,29 +588,48 @@ export async function POST(req: Request) {
     }
 
     if (action === 'createSuggestion') {
+      // Solo existe un tipo: propuesta de turno con fecha y hora. El autor cuenta como jugador 1.
       const author = cleanName(body.author);
-      const isBooking = body.isBooking === true;
-      const type = SUGGESTION_TYPES.includes(body.type) ? body.type : 'availability';
       const date = cleanDate(body.date);
       const time = cleanTime(body.time);
-      const rawMessage = String(body.message || '').trim().slice(0, 1000);
+      const note = String(body.message || '').trim().slice(0, 300);
 
       if (!author) return bad('Elegí tu jugador en Ranking o escribí tu nombre.');
-      if (isBooking && (!date || !time)) return bad('Para sacar turno, elegí fecha y hora.');
-      if (!isBooking && !rawMessage) return bad('Escribí una sugerencia.');
+      if (!date || !time) return bad('Elegí día y hora.');
+
+      const dupError = await checkProposalConflicts(date, time, null);
+      if (dupError) return bad(dupError);
 
       const { error } = await supabase.from('suggestions').insert({
         author_name: author,
-        type,
-        message: isBooking ? rawMessage || `Sacar turno ${date} ${time}` : rawMessage,
-        suggested_date: date || null,
-        suggested_time: time || null,
+        type: 'availability',
+        message: note || `Sacar turno ${date} ${time}`,
+        suggested_date: date,
+        suggested_time: time,
         is_urgent: false,
         status: 'open',
-        is_booking_request: isBooking,
+        is_booking_request: true,
         booking_status: 'open',
       });
-      if (error) return bad(`No se pudo guardar la sugerencia: ${error.message}`);
+      if (error) return bad(`No se pudo guardar la propuesta: ${error.message}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'cancelSuggestion') {
+      const suggestionId = Number(body.suggestionId);
+      const isAdmin = !!pin && pin === adminPin;
+      const { data: sug } = await supabase
+        .from('suggestions')
+        .select('id, author_name, status')
+        .eq('id', suggestionId)
+        .maybeSingle();
+      if (!sug) return bad('No se encontró la propuesta.');
+      if (sug.status !== 'open') return bad('La propuesta ya no está abierta.');
+      if (!isAdmin && !sameName(body.editorName, sug.author_name)) {
+        return bad('Solo quien la propuso puede cancelarla.', 403);
+      }
+      const { error } = await supabase.from('suggestions').update({ status: 'cancelled' }).eq('id', suggestionId);
+      if (error) return bad(`No se pudo cancelar: ${error.message}`);
       return NextResponse.json({ ok: true });
     }
 
@@ -604,7 +643,7 @@ export async function POST(req: Request) {
         .maybeSingle();
       if (sugError || !sug) return bad('No se encontró la sugerencia.');
 
-      if (sug.status !== 'open' || (sug.is_booking_request && sug.booking_status !== 'open')) {
+      if (sug.status !== 'open' || (sug.is_booking_request && sug.booking_status === 'booked')) {
         return bad('La sugerencia ya no se puede editar.');
       }
       if (!isAdmin && !sameName(body.editorName, sug.author_name)) {
@@ -614,12 +653,30 @@ export async function POST(req: Request) {
       const date = cleanDate(body.date);
       const time = cleanTime(body.time);
       const message = String(body.message || '').trim().slice(0, 1000);
-      if (sug.is_booking_request && (!date || !time)) return bad('Para sacar turno, elegí fecha y hora.');
+      if (sug.is_booking_request && (!date || !time)) return bad('Elegí día y hora.');
       if (!message) return bad('La sugerencia no puede quedar vacía.');
+
+      const patch: Record<string, unknown> = { message, suggested_date: date || null, suggested_time: time || null };
+      if (sug.is_booking_request) {
+        const changedWhen = date !== cleanDate(sug.suggested_date) || time !== cleanTime(sug.suggested_time);
+        if (changedWhen) {
+          const dupError = await checkProposalConflicts(date, time, suggestionId);
+          if (dupError) return bad(dupError);
+        }
+        // Si el admin había marcado "no hay cancha" y cambian el horario, vuelve a quedar abierta
+        if (changedWhen && sug.booking_status === 'not_available') {
+          Object.assign(patch, {
+            booking_status: 'open',
+            admin_response_type: null,
+            admin_response_message: null,
+            admin_responded_at: null,
+          });
+        }
+      }
 
       const { error } = await supabase
         .from('suggestions')
-        .update({ message, suggested_date: date || null, suggested_time: time || null })
+        .update(patch)
         .eq('id', suggestionId);
       if (error) return bad(`No se pudo editar la sugerencia: ${error.message}`);
       return NextResponse.json({ ok: true });
@@ -631,8 +688,22 @@ export async function POST(req: Request) {
       if (!suggestionId || !name) return bad('Elegí tu jugador en Ranking o escribí tu nombre.');
 
       if (action === 'joinSuggestion') {
-        const { data: sug } = await supabase.from('suggestions').select('id, status').eq('id', suggestionId).maybeSingle();
+        const { data: sug } = await supabase
+          .from('suggestions')
+          .select('id, status, author_name, is_booking_request, booking_status')
+          .eq('id', suggestionId)
+          .maybeSingle();
         if (!sug || sug.status !== 'open') return bad('La sugerencia ya no está abierta.');
+
+        if (sug.is_booking_request) {
+          if (sameName(sug.author_name, name)) return bad('Ya estás: vos propusiste este turno.');
+          if (sug.booking_status === 'not_available') return bad('No hay cancha en ese horario.');
+          const { count } = await supabase
+            .from('suggestion_responses')
+            .select('id', { count: 'exact', head: true })
+            .eq('suggestion_id', suggestionId);
+          if (1 + (count || 0) >= MAX_PLAYERS) return bad('Ya están los 4 jugadores.');
+        }
 
         const { error } = await supabase
           .from('suggestion_responses')
