@@ -143,6 +143,16 @@ export type RankingPlayer = {
   best_win_streak: number;
 };
 
+export type RankedPlayer = RankingPlayer & {
+  ranking_points: number;
+  inactivity_penalty: number;
+  inactive_months: number;
+  matches_window: number;
+  last_played: string | null;
+  is_official: boolean;
+  official_position: number | null;
+};
+
 export type Match = {
   id: number;
   match_date: string;

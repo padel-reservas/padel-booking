@@ -51,6 +51,7 @@ import {
   rankingPlayerIdFromSlotPlayerId,
   sortPlayers,
   statsMap,
+  buildOfficialRanking,
   todayISO,
 } from './lib/padelUtils';
 
@@ -468,29 +469,27 @@ export default function Page() {
     window.localStorage.setItem('appVersionDismissed', APP_VERSION);
   }
 
-  const rankingStats = useMemo(() => statsMap(rankingPlayers), [rankingPlayers]);
+  const officialRanking = useMemo(
+    () => buildOfficialRanking(rankingPlayers, matches),
+    [rankingPlayers, matches]
+  );
+
+  const rankingStats = useMemo(() => statsMap(officialRanking.all), [officialRanking]);
 
   const myRankingSummary = useMemo(() => {
     if (!myPlayerName) return null;
 
-    const sorted = [...rankingPlayers].sort((a, b) => {
-      if (b.display_rating !== a.display_rating) return b.display_rating - a.display_rating;
-      if (b.elo_rating !== a.elo_rating) return b.elo_rating - a.elo_rating;
-      return a.name.localeCompare(b.name);
-    });
-
-    const idx = sorted.findIndex(
+    const player = officialRanking.all.find(
       (p) => p.name.trim().toLowerCase() === myPlayerName.trim().toLowerCase()
     );
 
-    if (idx === -1) return null;
+    if (!player) return null;
 
-    const player = sorted[idx];
     return {
-      position: idx + 1,
+      position: player.official_position,
       player,
     };
-  }, [rankingPlayers, myPlayerName]);
+  }, [officialRanking, myPlayerName]);
 
   const chartPlayerName = selectedChartPlayer || myPlayerName || rankingPlayers[0]?.name || '';
 
@@ -2463,6 +2462,7 @@ export default function Page() {
       {!loading && activeTab === 'ranking' && (
         <RankingTab
           rankingPlayers={rankingPlayers}
+          officialRanking={officialRanking}
           myPlayerName={myPlayerName}
           handleSelectMyPlayer={handleSelectMyPlayer}
           clearMyPlayer={clearMyPlayer}

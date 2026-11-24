@@ -1,4 +1,11 @@
-import type { ChartPoint, Match, RankingPlayer, ResultFormState, SlotPlayer } from './padelTypes';
+import type {
+  ChartPoint,
+  Match,
+  RankedPlayer,
+  RankingPlayer,
+  ResultFormState,
+  SlotPlayer,
+} from './padelTypes';
 
 export function todayISO() {
   const d = new Date();
@@ -37,22 +44,107 @@ export function playerNameById(players: RankingPlayer[], id: number) {
   return players.find((p) => p.id === id)?.name || `Jugador ${id}`;
 }
 
-export function statsMap(rankingPlayers: RankingPlayer[]) {
-  const map = new Map<
-    string,
-    { position: number; display: number; winPct: number; provisional: boolean }
-  >();
+// Reglas del ranking oficial. El ELO interno no se toca: esto solo cambia
+// qué se muestra y en qué orden.
+export const RANKING_RULES = {
+  officialMinMatches: 12, // partidos mínimos en la ventana para estar arriba de la línea
+  windowDays: 365, // ventana móvil de 12 meses
+  inactivityGraceDays: 60, // 2 meses sin jugar antes de empezar a perder puntos
+  inactivityPtsPerMonth: 15, // puntos que se pierden por mes completo de inactividad
+  inactivityFloor: 1500, // la penalización nunca baja a nadie de este valor
+};
 
-  const sorted = [...rankingPlayers].sort((a, b) => {
-    if (b.display_rating !== a.display_rating) return b.display_rating - a.display_rating;
-    if (b.elo_rating !== a.elo_rating) return b.elo_rating - a.elo_rating;
-    return a.name.localeCompare(b.name);
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function daysBetweenISO(fromISO: string, toISO: string) {
+  return Math.round((Date.parse(toISO) - Date.parse(fromISO)) / DAY_MS);
+}
+
+function compareRanked(a: RankedPlayer, b: RankedPlayer) {
+  if (b.ranking_points !== a.ranking_points) return b.ranking_points - a.ranking_points;
+  if (b.elo_rating !== a.elo_rating) return b.elo_rating - a.elo_rating;
+  return a.name.localeCompare(b.name);
+}
+
+export function buildOfficialRanking(
+  rankingPlayers: RankingPlayer[],
+  matches: Match[],
+  today: string = todayISO()
+) {
+  const rules = RANKING_RULES;
+  const windowStart = new Date(Date.parse(today) - rules.windowDays * DAY_MS)
+    .toISOString()
+    .slice(0, 10);
+
+  const windowCount = new Map<number, number>();
+  const lastPlayed = new Map<number, string>();
+
+  for (const m of matches) {
+    if (!m.winner_team || !m.match_date) continue;
+    const ids = [
+      m.team_a_player_1_id,
+      m.team_a_player_2_id,
+      m.team_b_player_1_id,
+      m.team_b_player_2_id,
+    ];
+    for (const id of ids) {
+      if (id == null) continue;
+      if (m.match_date >= windowStart) windowCount.set(id, (windowCount.get(id) || 0) + 1);
+      const prev = lastPlayed.get(id);
+      if (!prev || m.match_date > prev) lastPlayed.set(id, m.match_date);
+    }
+  }
+
+  const rows: RankedPlayer[] = rankingPlayers
+    .filter((p) => (p.matches_played || 0) > 0)
+    .map((p) => {
+      const display = Number(p.display_rating);
+      const last = lastPlayed.get(p.id) || null;
+      const daysInactive = last ? daysBetweenISO(last, today) : 0;
+      const inactiveMonths = Math.floor(
+        Math.max(0, daysInactive - rules.inactivityGraceDays) / 30
+      );
+      const points =
+        display > rules.inactivityFloor
+          ? Math.max(rules.inactivityFloor, display - inactiveMonths * rules.inactivityPtsPerMonth)
+          : display;
+      const matchesWindow = windowCount.get(p.id) || 0;
+
+      return {
+        ...p,
+        ranking_points: points,
+        inactivity_penalty: display - points,
+        inactive_months: inactiveMonths,
+        matches_window: matchesWindow,
+        last_played: last,
+        is_official: matchesWindow >= rules.officialMinMatches,
+        official_position: null,
+      };
+    });
+
+  const official = rows.filter((r) => r.is_official).sort(compareRanked);
+  official.forEach((r, idx) => {
+    r.official_position = idx + 1;
   });
 
-  sorted.forEach((p, idx) => {
+  // Debajo de la línea: primero los que están más cerca de entrar.
+  const below = rows
+    .filter((r) => !r.is_official)
+    .sort((a, b) => b.matches_window - a.matches_window || compareRanked(a, b));
+
+  return { official, below, all: [...official, ...below] };
+}
+
+export function statsMap(rankedPlayers: RankedPlayer[]) {
+  const map = new Map<
+    string,
+    { position: number | null; display: number; winPct: number; provisional: boolean }
+  >();
+
+  rankedPlayers.forEach((p) => {
     map.set(p.name.trim().toLowerCase(), {
-      position: idx + 1,
-      display: p.display_rating,
+      position: p.official_position,
+      display: p.ranking_points,
       winPct: p.win_pct,
       provisional: p.provisional,
     });

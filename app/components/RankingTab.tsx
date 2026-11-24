@@ -1,12 +1,19 @@
 'use client';
 
 import React from 'react';
-import type { ChartPoint, RankingPlayer } from '../lib/padelTypes';
+import type { ChartPoint, RankedPlayer, RankingPlayer } from '../lib/padelTypes';
+import { RANKING_RULES } from '../lib/padelUtils';
 
 type MyRankingSummary = {
-  position: number;
-  player: RankingPlayer;
+  position: number | null;
+  player: RankedPlayer;
 } | null;
+
+type OfficialRanking = {
+  official: RankedPlayer[];
+  below: RankedPlayer[];
+  all: RankedPlayer[];
+};
 
 type ChartStats = {
   first: number;
@@ -26,6 +33,7 @@ type ChartGeometry = {
 
 type Props = {
   rankingPlayers: RankingPlayer[];
+  officialRanking: OfficialRanking;
   myPlayerName: string;
   handleSelectMyPlayer: (name: string) => void;
   clearMyPlayer: () => void;
@@ -38,6 +46,7 @@ type Props = {
 
 export default function RankingTab({
   rankingPlayers,
+  officialRanking,
   myPlayerName,
   handleSelectMyPlayer,
   clearMyPlayer,
@@ -47,6 +56,178 @@ export default function RankingTab({
   chartStats,
   chartGeometry,
 }: Props) {
+  function renderRow(p: RankedPlayer, idx: number) {
+      const isOfficial = p.is_official;
+      const isTop3 = isOfficial && idx < 3;
+      const isMe =
+        myPlayerName &&
+        p.name.trim().toLowerCase() === myPlayerName.trim().toLowerCase();
+      const isChartPlayer =
+        chartPlayerName &&
+        p.name.trim().toLowerCase() === chartPlayerName.trim().toLowerCase();
+
+      const rowBg = isMe
+        ? '#dbeafe'
+        : !isOfficial
+        ? '#fafafa'
+        : idx === 0
+        ? '#fffbea'
+        : idx === 1
+        ? '#f8fafc'
+        : idx === 2
+        ? '#fff7ed'
+        : idx % 2 === 0
+        ? 'white'
+        : '#fcfcfd';
+
+      return (
+        <tr
+          key={p.id}
+          onClick={() => setSelectedChartPlayer(p.name)}
+          style={{
+            background: rowBg,
+            cursor: 'pointer',
+            color: isOfficial ? undefined : '#64748b',
+            boxShadow: isChartPlayer ? 'inset 0 0 0 2px #93c5fd' : undefined,
+            borderLeft: isMe ? '4px solid #2563eb' : undefined,
+          }}
+        >
+          <td
+            style={{
+              padding: '14px 12px',
+              borderBottom: '1px solid #eef2f7',
+              fontWeight: 800,
+            }}
+          >
+            {isOfficial ? p.official_position : '—'}
+          </td>
+
+          <td
+            style={{
+              padding: '14px 12px',
+              borderBottom: '1px solid #eef2f7',
+            }}
+          >
+            <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{p.name}</span>
+              {isMe && (
+                <span
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    background: '#1d4ed8',
+                    color: 'white',
+                  }}
+                >
+                  Vos
+                </span>
+              )}
+            </div>
+          </td>
+
+          <td
+            style={{
+              padding: '14px 12px',
+              borderBottom: '1px solid #eef2f7',
+            }}
+          >
+            <div
+              style={{
+                display: 'inline-flex',
+                padding: '6px 10px',
+                borderRadius: 999,
+                background: isTop3 ? '#111827' : isOfficial ? '#eff6ff' : '#f1f5f9',
+                color: isTop3 ? 'white' : isOfficial ? '#1d4ed8' : '#64748b',
+                fontWeight: 800,
+              }}
+            >
+              {Math.round(p.ranking_points)}
+            </div>
+            {p.inactivity_penalty > 0 && (
+              <div
+                title={`${p.inactive_months} ${p.inactive_months === 1 ? 'mes' : 'meses'} sin jugar`}
+                style={{ fontSize: 11, color: '#b91c1c', fontWeight: 700, marginTop: 4 }}
+              >
+                −{Math.round(p.inactivity_penalty)} inactividad
+              </div>
+            )}
+          </td>
+
+          <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+            {isOfficial ? (
+              p.matches_played
+            ) : (
+              <span title="Partidos en los últimos 12 meses">
+                {p.matches_window}/{RANKING_RULES.officialMinMatches}
+              </span>
+            )}
+          </td>
+
+          <td
+            style={{
+              padding: '14px 12px',
+              borderBottom: '1px solid #eef2f7',
+              color: '#166534',
+              fontWeight: 700,
+            }}
+          >
+            {p.wins}
+          </td>
+
+          <td
+            style={{
+              padding: '14px 12px',
+              borderBottom: '1px solid #eef2f7',
+              color: '#b91c1c',
+              fontWeight: 700,
+            }}
+          >
+            {p.losses}
+          </td>
+
+          <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+            {Number(p.win_pct).toFixed(2)}%
+          </td>
+
+          <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+            <span
+              style={{
+                padding: '5px 10px',
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 700,
+                background: p.provisional ? '#fef2f2' : '#ecfdf5',
+                color: p.provisional ? '#b91c1c' : '#166534',
+              }}
+            >
+              {p.provisional ? 'Sí' : 'No'}
+            </span>
+          </td>
+
+          <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+            <span
+              style={{
+                padding: '5px 10px',
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 800,
+                background: p.current_win_streak > 0 ? '#fff7ed' : '#f8fafc',
+                color: p.current_win_streak > 0 ? '#c2410c' : '#64748b',
+              }}
+            >
+              {p.current_win_streak > 0 ? `🔥 ${p.current_win_streak}` : '0'}
+            </span>
+          </td>
+
+          <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
+            {p.best_win_streak}
+          </td>
+        </tr>
+      );
+  }
+
   return (
     <div
       style={{
@@ -71,7 +252,9 @@ export default function RankingTab({
         <div>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Ranking</h2>
           <div style={{ marginTop: 6, color: '#64748b', fontSize: 14 }}>
-            Puntos = ranking del sistema
+            Ranking oficial: {RANKING_RULES.officialMinMatches}+ partidos en los últimos 12 meses.
+            Sin jugar 2 meses: −{RANKING_RULES.inactivityPtsPerMonth} pts por mes (mín.{' '}
+            {RANKING_RULES.inactivityFloor}).
           </div>
         </div>
 
@@ -86,7 +269,7 @@ export default function RankingTab({
             fontWeight: 700,
           }}
         >
-          {rankingPlayers.length} jugadores
+          {officialRanking.official.length} en ranking · {officialRanking.below.length} en camino
         </div>
       </div>
 
@@ -157,7 +340,9 @@ export default function RankingTab({
           }}
         >
           <div style={{ fontWeight: 800, fontSize: 18 }}>
-            #{myRankingSummary.position} en el ranking
+            {myRankingSummary.position
+              ? `#${myRankingSummary.position} en el ranking`
+              : `En camino: ${myRankingSummary.player.matches_window}/${RANKING_RULES.officialMinMatches} partidos para entrar al ranking`}
           </div>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -169,7 +354,9 @@ export default function RankingTab({
                 fontWeight: 800,
               }}
             >
-              {Math.round(Number(myRankingSummary.player.display_rating))} pts
+              {Math.round(myRankingSummary.player.ranking_points)} pts
+              {myRankingSummary.player.inactivity_penalty > 0 &&
+                ` (−${Math.round(myRankingSummary.player.inactivity_penalty)} inactividad)`}
             </div>
 
             <div style={{ fontWeight: 700 }}>
@@ -409,165 +596,30 @@ export default function RankingTab({
         </thead>
 
         <tbody>
-          {[...rankingPlayers]
-            .sort((a, b) => {
-              if (b.display_rating !== a.display_rating) return b.display_rating - a.display_rating;
-              if (b.elo_rating !== a.elo_rating) return b.elo_rating - a.elo_rating;
-              return a.name.localeCompare(b.name);
-            })
-            .map((p, idx) => {
-              const isTop3 = idx < 3;
-              const isMe =
-                myPlayerName &&
-                p.name.trim().toLowerCase() === myPlayerName.trim().toLowerCase();
-              const isChartPlayer =
-                chartPlayerName &&
-                p.name.trim().toLowerCase() === chartPlayerName.trim().toLowerCase();
+          {officialRanking.official.map((p, idx) => renderRow(p, idx))}
 
-              const rowBg = isMe
-                ? '#dbeafe'
-                : idx === 0
-                ? '#fffbea'
-                : idx === 1
-                ? '#f8fafc'
-                : idx === 2
-                ? '#fff7ed'
-                : idx % 2 === 0
-                ? 'white'
-                : '#fcfcfd';
+          {officialRanking.below.length > 0 && (
+            <tr>
+              <td
+                colSpan={10}
+                style={{
+                  padding: '18px 12px 10px',
+                  borderTop: '3px dashed #cbd5e1',
+                  background: '#f8fafc',
+                }}
+              >
+                <div style={{ fontWeight: 800, color: '#334155', fontSize: 15 }}>
+                  En camino al ranking
+                </div>
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+                  Entran al ranking oficial al llegar a {RANKING_RULES.officialMinMatches} partidos
+                  en los últimos 12 meses.
+                </div>
+              </td>
+            </tr>
+          )}
 
-              return (
-                <tr
-                  key={p.id}
-                  onClick={() => setSelectedChartPlayer(p.name)}
-                  style={{
-                    background: rowBg,
-                    cursor: 'pointer',
-                    boxShadow: isChartPlayer ? 'inset 0 0 0 2px #93c5fd' : undefined,
-                    borderLeft: isMe ? '4px solid #2563eb' : undefined,
-                  }}
-                >
-                  <td
-                    style={{
-                      padding: '14px 12px',
-                      borderBottom: '1px solid #eef2f7',
-                      fontWeight: 800,
-                    }}
-                  >
-                    {idx + 1}
-                  </td>
-
-                  <td
-                    style={{
-                      padding: '14px 12px',
-                      borderBottom: '1px solid #eef2f7',
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>{p.name}</span>
-                      {isMe && (
-                        <span
-                          style={{
-                            padding: '5px 10px',
-                            borderRadius: 999,
-                            fontSize: 12,
-                            fontWeight: 800,
-                            background: '#1d4ed8',
-                            color: 'white',
-                          }}
-                        >
-                          Vos
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td
-                    style={{
-                      padding: '14px 12px',
-                      borderBottom: '1px solid #eef2f7',
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        padding: '6px 10px',
-                        borderRadius: 999,
-                        background: isTop3 ? '#111827' : '#eff6ff',
-                        color: isTop3 ? 'white' : '#1d4ed8',
-                        fontWeight: 800,
-                      }}
-                    >
-                      {Math.round(Number(p.display_rating))}
-                    </div>
-                  </td>
-
-                  <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-                    {p.matches_played}
-                  </td>
-
-                  <td
-                    style={{
-                      padding: '14px 12px',
-                      borderBottom: '1px solid #eef2f7',
-                      color: '#166534',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {p.wins}
-                  </td>
-
-                  <td
-                    style={{
-                      padding: '14px 12px',
-                      borderBottom: '1px solid #eef2f7',
-                      color: '#b91c1c',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {p.losses}
-                  </td>
-
-                  <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-                    {Number(p.win_pct).toFixed(2)}%
-                  </td>
-
-                  <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-                    <span
-                      style={{
-                        padding: '5px 10px',
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        background: p.provisional ? '#fef2f2' : '#ecfdf5',
-                        color: p.provisional ? '#b91c1c' : '#166534',
-                      }}
-                    >
-                      {p.provisional ? 'Sí' : 'No'}
-                    </span>
-                  </td>
-
-                  <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-                    <span
-                      style={{
-                        padding: '5px 10px',
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 800,
-                        background: p.current_win_streak > 0 ? '#fff7ed' : '#f8fafc',
-                        color: p.current_win_streak > 0 ? '#c2410c' : '#64748b',
-                      }}
-                    >
-                      {p.current_win_streak > 0 ? `🔥 ${p.current_win_streak}` : '0'}
-                    </span>
-                  </td>
-
-                  <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-                    {p.best_win_streak}
-                  </td>
-                </tr>
-              );
-            })}
+          {officialRanking.below.map((p, idx) => renderRow(p, idx))}
         </tbody>
       </table>
     </div>
