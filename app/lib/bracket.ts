@@ -10,6 +10,25 @@ export const KO_ROUNDS = [
   { round: 4, name: 'Final', window: 'lun 30/11 – dom 6/12' },
 ] as const;
 
+// Ronda 4: slot 0 = final, slot 1 = partido por el 3er puesto
+export const KO_THIRD_PLACE_SLOT = 1;
+export const KO_THIRD_PLACE_NAME = '3er puesto';
+
+export function isThirdPlace(m: { round: number; slot: number }) {
+  return m.round === 4 && m.slot === KO_THIRD_PLACE_SLOT;
+}
+
+export function koMatchRoundName(m: { round: number; slot: number }) {
+  if (isThirdPlace(m)) return KO_THIRD_PLACE_NAME;
+  return KO_ROUNDS.find((r) => r.round === m.round)?.name || '';
+}
+
+// Perdedor de un partido ya jugado (para armar el 3er puesto antes de que exista la fila)
+export function koLoser(m: KoMatch | null | undefined): number | null {
+  if (!m || m.status !== 'played' || !m.winner_pair_id) return null;
+  return m.winner_pair_id === m.pair1_id ? m.pair2_id : m.pair1_id;
+}
+
 export type KoPair = {
   id: number;
   tournament_key: string;
@@ -187,10 +206,16 @@ export function drawBracketImage(canvas: HTMLCanvasElement, input: BracketImageI
     }
   };
 
-  const drawBox = (round: number, slot: number) => {
-    const m = matchAt(round, slot);
+  const drawBox = (
+    round: number,
+    slot: number,
+    cyOverride?: number,
+    placeholders?: [string, string],
+    mOverride?: KoMatch | null
+  ) => {
+    const m = mOverride ?? matchAt(round, slot);
     const x = colX(round - 1);
-    const cy = centerY(round, slot);
+    const cy = cyOverride ?? centerY(round, slot);
     const y = cy - boxH / 2;
 
     ctx.fillStyle = COLORS.boxBg;
@@ -214,8 +239,8 @@ export function drawBracketImage(canvas: HTMLCanvasElement, input: BracketImageI
       return;
     }
 
-    drawLine(x, y, m?.pair1_id ?? null, m, 1, '—');
-    drawLine(x, y + lineH, m?.pair2_id ?? null, m, 2, '—');
+    drawLine(x, y, m?.pair1_id ?? null, m, 1, placeholders?.[0] ?? '—');
+    drawLine(x, y + lineH, m?.pair2_id ?? null, m, 2, placeholders?.[1] ?? '—');
   };
 
   // Conectores
@@ -257,4 +282,36 @@ export function drawBracketImage(canvas: HTMLCanvasElement, input: BracketImageI
   ctx.fillStyle = COLORS.title;
   ctx.font = font(22, 800);
   ctx.fillText(champ ? truncate(pairLabel(champ), colW - 30) : '?', cx + 16, cy);
+
+  // Partido por el 3er puesto (debajo de la final) y 3er puesto en la columna de campeones
+  const tpY = cy + 260;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = COLORS.title;
+  ctx.font = font(22, 800);
+  ctx.fillText('Partido por el 3er puesto', colX(3), tpY - boxH / 2 - 16);
+  // Si todavía no existe la fila, se arma con los perdedores de semis ya jugadas
+  const tpVirtual: KoMatch | null = matchAt(4, KO_THIRD_PLACE_SLOT)
+    ? null
+    : ({
+        ...(matchAt(4, 0) as KoMatch),
+        id: -1, slot: KO_THIRD_PLACE_SLOT,
+        pair1_id: koLoser(matchAt(3, 0)), pair2_id: koLoser(matchAt(3, 1)),
+        status: 'pending', winner_pair_id: null, walkover: false,
+      } as KoMatch);
+  drawBox(4, KO_THIRD_PLACE_SLOT, tpY, ['Perdedor semi 1', 'Perdedor semi 2'], tpVirtual);
+
+  const tp = matchAt(4, KO_THIRD_PLACE_SLOT);
+  const third = tp && tp.status === 'played' && tp.winner_pair_id ? pairById.get(tp.winner_pair_id) : null;
+  ctx.fillStyle = COLORS.title;
+  ctx.font = font(22, 800);
+  ctx.fillText('3er puesto', cx, tpY - boxH / 2 - 16);
+  ctx.fillStyle = COLORS.boxBg;
+  ctx.fillRect(cx, tpY - boxH / 2, colW, boxH);
+  ctx.strokeStyle = COLORS.boxBorder;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx, tpY - boxH / 2, colW, boxH);
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = COLORS.title;
+  ctx.font = font(20, 700);
+  ctx.fillText(third ? truncate(pairLabel(third), colW - 30) : '?', cx + 16, tpY);
 }
