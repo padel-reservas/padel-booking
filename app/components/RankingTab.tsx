@@ -33,6 +33,7 @@ type ChartGeometry = {
 
 type Props = {
   rankingPlayers: RankingPlayer[];
+  titulosPorJugador?: Map<string, number>;
   officialRanking: OfficialRanking;
   myPlayerName: string;
   handleSelectMyPlayer: (name: string) => void;
@@ -46,6 +47,7 @@ type Props = {
 
 export default function RankingTab({
   rankingPlayers,
+  titulosPorJugador,
   officialRanking,
   myPlayerName,
   handleSelectMyPlayer,
@@ -128,6 +130,16 @@ export default function RankingTab({
           >
             <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>{p.name}</span>
+              {(() => {
+                const t = titulosPorJugador?.get(p.name.trim().toLowerCase()) || 0;
+                if (!t) return null;
+                return (
+                  <span title={`${t} ${t === 1 ? 'título' : 'títulos'}`} style={{ fontSize: 14 }}>
+                    {'🏆'.repeat(Math.min(t, 3))}
+                    {t > 3 ? `×${t}` : ''}
+                  </span>
+                );
+              })()}
               {isMe && (
                 <span
                   style={{

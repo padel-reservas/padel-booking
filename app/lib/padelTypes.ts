@@ -196,7 +196,8 @@ export type TabKey =
   | 'actividad'
   | 'torneo'
   | 'copadeLeche'
-  | 'torneoInteres';
+  | 'torneoInteres'
+  | 'torneos';
 
 export type ResultFormMode = 'slot' | 'manual';
 

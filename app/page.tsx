@@ -16,6 +16,8 @@ import Image from 'next/image';
 import logoDisplay from './logo-display.png';
 import { APP_VERSION } from './lib/appVersion';
 import TorneoTab from './components/TorneoTab';
+import TorneosTab from './components/TorneosTab';
+import { useTorneosHistorial } from './lib/torneos';
 import CopaDeLecheTab from './components/CopaDeLecheTab';
 import TorneoInteresTab from './components/TorneoInteresTab';
 import CuadroTab from './components/CuadroTab';
@@ -58,6 +60,8 @@ import {
 const MAX_PLAYERS = 4;
 // El tab del Torneo Fall '26 aparece para todos a esta hora (admin lo ve antes)
 const CUADRO_VISIBLE_FROM = new Date('2026-11-09T22:00:00-05:00').getTime();
+// Vistas de detalle que se abren desde la pestaña Torneos
+const TORNEO_VIEWS: TabKey[] = ['cuadro', 'torneo', 'copadeLeche', 'torneoInteres'];
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -190,6 +194,7 @@ function formatAlternativeLine(alt: SuggestionAlternative) {
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabKey>('turnos');
   const [cuadroVisible, setCuadroVisible] = useState(false);
+  const torneosHistorial = useTorneosHistorial();
 
   useEffect(() => {
     const check = () => setCuadroVisible(Date.now() >= CUADRO_VISIBLE_FROM);
@@ -1923,7 +1928,7 @@ export default function Page() {
   }
 
   function tabButton(label: string, key: TabKey) {
-    const active = activeTab === key;
+    const active = activeTab === key || (key === 'torneos' && TORNEO_VIEWS.includes(activeTab));
     return (
       <button
         onClick={() => setActiveTab(key)}
@@ -2225,15 +2230,12 @@ export default function Page() {
           </button>
 
           {tabButton('Turnos', 'turnos')}
-          {(cuadroVisible || adminUnlocked) && tabButton("🏆 Torneo Fall '26", 'cuadro')}
+          {tabButton('🏆 Torneos', 'torneos')}
           {tabButton('Sugerencias', 'sugerencias')}
           {tabButton('Ranking', 'ranking')}
           {tabButton('Duelo', 'duelo')}
           {tabButton('Historial', 'historial')}
           {tabButton('Actividad', 'actividad')}
-          {tabButton("Torneo Spring '26", 'torneo')}
-          {tabButton('Copa de Leche', 'copadeLeche')}
-          {tabButton('¿Jugás el torneo?', 'torneoInteres')}
           {canSeeAdmin && activeTab === 'turnos' && (
             <button
               onClick={() => setShowAdmin(!showAdmin)}
@@ -2462,6 +2464,7 @@ export default function Page() {
       {!loading && activeTab === 'ranking' && (
         <RankingTab
           rankingPlayers={rankingPlayers}
+          titulosPorJugador={torneosHistorial.titulosPorJugador}
           officialRanking={officialRanking}
           myPlayerName={myPlayerName}
           handleSelectMyPlayer={handleSelectMyPlayer}
@@ -2503,6 +2506,32 @@ export default function Page() {
           setSelectedActivityPlayer={setSelectedActivityPlayer}
           activityData={activityData}
         />
+      )}
+      {!loading && activeTab === 'torneos' && (
+        <TorneosTab
+          torneos={torneosHistorial.torneos}
+          palmares={torneosHistorial.palmares}
+          myPlayerName={myPlayerName}
+          canSeeCuadro={cuadroVisible || adminUnlocked}
+          onOpen={(view) => setActiveTab(view)}
+        />
+      )}
+      {!loading && TORNEO_VIEWS.includes(activeTab) && (
+        <button
+          onClick={() => setActiveTab('torneos')}
+          style={{
+            marginBottom: 12,
+            padding: '8px 12px',
+            borderRadius: 10,
+            border: '1px solid #d1d5db',
+            background: 'white',
+            cursor: 'pointer',
+            fontWeight: 700,
+            fontSize: 13,
+          }}
+        >
+          ← Torneos
+        </button>
       )}
 {!loading && activeTab === 'torneo' && (
   <TorneoTab
