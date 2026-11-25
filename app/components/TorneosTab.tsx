@@ -160,7 +160,7 @@ export default function TorneosTab({ torneos, palmares, myPlayerName, canSeeCuad
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
               <thead>
                 <tr>
-                  {['Jugador', '🥇 Títulos', '🥈 2º', '🥉 Bronce', '🥛 Copa'].map((h, i) => (
+                  {['Jugador', '🥇', '🥈', '🥉', '🥛'].map((h, i) => (
                     <th
                       key={h}
                       style={{
