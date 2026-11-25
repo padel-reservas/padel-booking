@@ -49,9 +49,7 @@ export function playerNameById(players: RankingPlayer[], id: number) {
 export const RANKING_RULES = {
   officialMinMatches: 12, // partidos mínimos en la ventana para estar arriba de la línea
   windowDays: 365, // ventana móvil de 12 meses
-  inactivityGraceDays: 60, // 2 meses sin jugar antes de empezar a perder puntos
-  inactivityPtsPerMonth: 15, // puntos que se pierden por mes completo de inactividad
-  inactivityFloor: 1500, // la penalización nunca baja a nadie de este valor
+  inactiveAfterDays: 120, // ~4 meses sin jugar: sale del ranking oficial como "Inactivo" (no pierde puntos)
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -98,26 +96,19 @@ export function buildOfficialRanking(
   const rows: RankedPlayer[] = rankingPlayers
     .filter((p) => (p.matches_played || 0) > 0)
     .map((p) => {
-      const display = Number(p.display_rating);
       const last = lastPlayed.get(p.id) || null;
-      const daysInactive = last ? daysBetweenISO(last, today) : 0;
-      const inactiveMonths = Math.floor(
-        Math.max(0, daysInactive - rules.inactivityGraceDays) / 30
-      );
-      const points =
-        display > rules.inactivityFloor
-          ? Math.max(rules.inactivityFloor, display - inactiveMonths * rules.inactivityPtsPerMonth)
-          : display;
+      const daysSinceLast = last ? daysBetweenISO(last, today) : null;
       const matchesWindow = windowCount.get(p.id) || 0;
+      const isInactive = daysSinceLast == null || daysSinceLast > rules.inactiveAfterDays;
 
       return {
         ...p,
-        ranking_points: points,
-        inactivity_penalty: display - points,
-        inactive_months: inactiveMonths,
+        ranking_points: Number(p.display_rating),
+        days_since_last: daysSinceLast,
+        is_inactive: isInactive,
         matches_window: matchesWindow,
         last_played: last,
-        is_official: matchesWindow >= rules.officialMinMatches,
+        is_official: matchesWindow >= rules.officialMinMatches && !isInactive,
         official_position: null,
       };
     });
@@ -127,18 +118,30 @@ export function buildOfficialRanking(
     r.official_position = idx + 1;
   });
 
-  // Debajo de la línea: primero los que están más cerca de entrar.
+  // Inactivos: tenían los partidos pero hace más de 4 meses que no juegan.
+  // Vuelven a su lugar con el primer partido.
+  const inactive = rows
+    .filter((r) => !r.is_official && r.is_inactive && r.matches_window >= rules.officialMinMatches)
+    .sort(compareRanked);
+
+  // En camino: todavía no llegan al mínimo de partidos. Primero los más cerca de entrar.
   const below = rows
-    .filter((r) => !r.is_official)
+    .filter((r) => !r.is_official && r.matches_window < rules.officialMinMatches)
     .sort((a, b) => b.matches_window - a.matches_window || compareRanked(a, b));
 
-  return { official, below, all: [...official, ...below] };
+  return { official, inactive, below, all: [...official, ...inactive, ...below] };
 }
 
 export function statsMap(rankedPlayers: RankedPlayer[]) {
   const map = new Map<
     string,
-    { position: number | null; display: number; winPct: number; provisional: boolean }
+    {
+      position: number | null;
+      display: number;
+      winPct: number;
+      provisional: boolean;
+      inactive: boolean;
+    }
   >();
 
   rankedPlayers.forEach((p) => {
@@ -147,6 +150,7 @@ export function statsMap(rankedPlayers: RankedPlayer[]) {
       display: p.ranking_points,
       winPct: p.win_pct,
       provisional: p.provisional,
+      inactive: p.is_inactive && p.matches_window >= RANKING_RULES.officialMinMatches,
     });
   });
 

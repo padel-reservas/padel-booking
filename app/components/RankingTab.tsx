@@ -11,6 +11,7 @@ type MyRankingSummary = {
 
 type OfficialRanking = {
   official: RankedPlayer[];
+  inactive: RankedPlayer[];
   below: RankedPlayer[];
   all: RankedPlayer[];
 };
@@ -56,6 +57,24 @@ export default function RankingTab({
   chartStats,
   chartGeometry,
 }: Props) {
+  function sectionHeader(title: string, subtitle: string) {
+    return (
+      <tr>
+        <td
+          colSpan={10}
+          style={{
+            padding: '18px 12px 10px',
+            borderTop: '3px dashed #cbd5e1',
+            background: '#f8fafc',
+          }}
+        >
+          <div style={{ fontWeight: 800, color: '#334155', fontSize: 15 }}>{title}</div>
+          <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{subtitle}</div>
+        </td>
+      </tr>
+    );
+  }
+
   function renderRow(p: RankedPlayer, idx: number) {
       const isOfficial = p.is_official;
       const isTop3 = isOfficial && idx < 3;
@@ -110,6 +129,25 @@ export default function RankingTab({
           >
             <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>{p.name}</span>
+              {p.is_inactive && p.matches_window >= RANKING_RULES.officialMinMatches && (
+                <span
+                  title={
+                    p.last_played
+                      ? `Último partido: ${p.last_played}. Vuelve al ranking con su próximo partido.`
+                      : undefined
+                  }
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 800,
+                    background: '#fef3c7',
+                    color: '#92400e',
+                  }}
+                >
+                  Inactivo
+                </span>
+              )}
               {isMe && (
                 <span
                   style={{
@@ -145,18 +183,10 @@ export default function RankingTab({
             >
               {Math.round(p.ranking_points)}
             </div>
-            {p.inactivity_penalty > 0 && (
-              <div
-                title={`${p.inactive_months} ${p.inactive_months === 1 ? 'mes' : 'meses'} sin jugar`}
-                style={{ fontSize: 11, color: '#b91c1c', fontWeight: 700, marginTop: 4 }}
-              >
-                −{Math.round(p.inactivity_penalty)} inactividad
-              </div>
-            )}
           </td>
 
           <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-            {isOfficial ? (
+            {isOfficial || p.matches_window >= RANKING_RULES.officialMinMatches ? (
               p.matches_played
             ) : (
               <span title="Partidos en los últimos 12 meses">
@@ -253,8 +283,7 @@ export default function RankingTab({
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Ranking</h2>
           <div style={{ marginTop: 6, color: '#64748b', fontSize: 14 }}>
             Ranking oficial: {RANKING_RULES.officialMinMatches}+ partidos en los últimos 12 meses.
-            Sin jugar 2 meses: −{RANKING_RULES.inactivityPtsPerMonth} pts por mes (mín.{' '}
-            {RANKING_RULES.inactivityFloor}).
+            Más de 4 meses sin jugar = inactivo (no pierde puntos, vuelve al jugar).
           </div>
         </div>
 
@@ -269,7 +298,8 @@ export default function RankingTab({
             fontWeight: 700,
           }}
         >
-          {officialRanking.official.length} en ranking · {officialRanking.below.length} en camino
+          {officialRanking.official.length} en ranking · {officialRanking.inactive.length} inactivos ·{' '}
+          {officialRanking.below.length} en camino
         </div>
       </div>
 
@@ -342,6 +372,8 @@ export default function RankingTab({
           <div style={{ fontWeight: 800, fontSize: 18 }}>
             {myRankingSummary.position
               ? `#${myRankingSummary.position} en el ranking`
+              : myRankingSummary.player.matches_window >= RANKING_RULES.officialMinMatches
+              ? 'Inactivo: volvés al ranking con tu próximo partido'
               : `En camino: ${myRankingSummary.player.matches_window}/${RANKING_RULES.officialMinMatches} partidos para entrar al ranking`}
           </div>
 
@@ -355,8 +387,6 @@ export default function RankingTab({
               }}
             >
               {Math.round(myRankingSummary.player.ranking_points)} pts
-              {myRankingSummary.player.inactivity_penalty > 0 &&
-                ` (−${Math.round(myRankingSummary.player.inactivity_penalty)} inactividad)`}
             </div>
 
             <div style={{ fontWeight: 700 }}>
@@ -598,26 +628,19 @@ export default function RankingTab({
         <tbody>
           {officialRanking.official.map((p, idx) => renderRow(p, idx))}
 
-          {officialRanking.below.length > 0 && (
-            <tr>
-              <td
-                colSpan={10}
-                style={{
-                  padding: '18px 12px 10px',
-                  borderTop: '3px dashed #cbd5e1',
-                  background: '#f8fafc',
-                }}
-              >
-                <div style={{ fontWeight: 800, color: '#334155', fontSize: 15 }}>
-                  En camino al ranking
-                </div>
-                <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-                  Entran al ranking oficial al llegar a {RANKING_RULES.officialMinMatches} partidos
-                  en los últimos 12 meses.
-                </div>
-              </td>
-            </tr>
-          )}
+          {officialRanking.inactive.length > 0 &&
+            sectionHeader(
+              'Inactivos',
+              'Más de 4 meses sin jugar. Conservan sus puntos y vuelven a su lugar con el próximo partido.'
+            )}
+
+          {officialRanking.inactive.map((p, idx) => renderRow(p, idx))}
+
+          {officialRanking.below.length > 0 &&
+            sectionHeader(
+              'En camino al ranking',
+              `Entran al ranking oficial al llegar a ${RANKING_RULES.officialMinMatches} partidos en los últimos 12 meses.`
+            )}
 
           {officialRanking.below.map((p, idx) => renderRow(p, idx))}
         </tbody>

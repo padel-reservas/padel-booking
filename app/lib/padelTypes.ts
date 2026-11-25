@@ -145,8 +145,8 @@ export type RankingPlayer = {
 
 export type RankedPlayer = RankingPlayer & {
   ranking_points: number;
-  inactivity_penalty: number;
-  inactive_months: number;
+  days_since_last: number | null;
+  is_inactive: boolean;
   matches_window: number;
   last_played: string | null;
   is_official: boolean;

@@ -36,6 +36,7 @@ type RankingStat = {
   display: number;
   winPct: number;
   provisional: boolean;
+  inactive?: boolean;
 };
 
 type Props = {
@@ -695,7 +696,7 @@ export default function TurnosTab({
 
                                 <div style={{ fontSize: 13, color: '#64748b' }}>
                                   {stats
-                                    ? `${stats.position ? `#${stats.position}` : 'Fuera del ranking'} · ${stats.winPct}% victorias${
+                                    ? `${stats.position ? `#${stats.position}` : stats.inactive ? 'Inactivo' : 'Fuera del ranking'} · ${stats.winPct}% victorias${
                                         stats.provisional ? ' · Provisional' : ''
                                       }`
                                     : 'Sin ranking'}
@@ -887,7 +888,7 @@ export default function TurnosTab({
 
                                 <div style={{ fontSize: 13, color: '#64748b' }}>
                                   {stats
-                                    ? `En espera · ${stats.position ? `#${stats.position}` : 'Fuera del ranking'} · ${stats.winPct}% victorias${
+                                    ? `En espera · ${stats.position ? `#${stats.position}` : stats.inactive ? 'Inactivo' : 'Fuera del ranking'} · ${stats.winPct}% victorias${
                                         stats.provisional ? ' · Provisional' : ''
                                       }`
                                     : 'En espera · Sin ranking'}
