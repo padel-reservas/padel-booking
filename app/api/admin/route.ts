@@ -157,7 +157,53 @@ async function createSlotForSuggestion(
 }
 
 // ===== Cuadro eliminación simple =====
-// Pasa al ganador a la ronda siguiente (o lo saca, si winnerPairId es null)
+// Ronda 4: slot 0 = final, slot 1 = partido por el 3er puesto (perdedores de semis)
+const KO_THIRD_PLACE_SLOT = 1;
+const isKoThirdPlace = (m: { round: number; slot: number }) => m.round === 4 && m.slot === KO_THIRD_PLACE_SLOT;
+
+// Arma/actualiza el partido por el 3er puesto con los perdedores de cada semi.
+// Pareja 1 = perdedor de la semi 1 (slot 0), pareja 2 = perdedor de la semi 2 (slot 1).
+async function koSyncThirdPlace(tournamentKey: string) {
+  const { data: semis, error: semisError } = await supabase
+    .from('ko_matches')
+    .select('slot, pair1_id, pair2_id, winner_pair_id, status')
+    .eq('tournament_key', tournamentKey)
+    .eq('round', 3);
+  if (semisError) return semisError;
+
+  const loserOf = (slot: number) => {
+    const m = (semis || []).find((x) => x.slot === slot);
+    if (!m || m.status !== 'played' || !m.winner_pair_id) return null;
+    return m.winner_pair_id === m.pair1_id ? m.pair2_id : m.pair1_id;
+  };
+
+  const { data: existing } = await supabase
+    .from('ko_matches')
+    .select('id, status')
+    .eq('tournament_key', tournamentKey)
+    .eq('round', 4)
+    .eq('slot', KO_THIRD_PLACE_SLOT)
+    .maybeSingle();
+  if (existing && existing.status !== 'pending') return null; // ya se jugó: no se toca
+
+  const { error } = await supabase.from('ko_matches').upsert(
+    {
+      tournament_key: tournamentKey,
+      round: 4,
+      slot: KO_THIRD_PLACE_SLOT,
+      pair1_id: loserOf(0),
+      pair2_id: loserOf(1),
+      is_bye: false,
+      status: 'pending',
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'tournament_key,round,slot' }
+  );
+  return error;
+}
+
+// Pasa al ganador a la ronda siguiente (o lo saca, si winnerPairId es null).
+// En semis, además manda al perdedor al partido por el 3er puesto.
 async function koSetNextSlot(match: { tournament_key: string; round: number; slot: number }, winnerPairId: number | null) {
   if (match.round >= 4) return null;
   const field = match.slot % 2 === 0 ? 'pair1_id' : 'pair2_id';
@@ -167,11 +213,18 @@ async function koSetNextSlot(match: { tournament_key: string; round: number; slo
     .eq('tournament_key', match.tournament_key)
     .eq('round', match.round + 1)
     .eq('slot', Math.floor(match.slot / 2));
-  return error;
+  if (error) return error;
+  if (match.round === 3) return koSyncThirdPlace(match.tournament_key);
+  return null;
 }
 
 const KO_MULTIPLIER: Record<number, number> = { 1: 1.5, 2: 2.0, 3: 2.5, 4: 3.0 };
 const KO_ROUND_NAME: Record<number, string> = { 1: 'Octavos', 2: 'Cuartos', 3: 'Semis', 4: 'Final' };
+const KO_THIRD_PLACE_MULTIPLIER = 2.0; // igual que el "TP" del torneo anterior
+const koMultiplier = (m: { round: number; slot: number }) =>
+  isKoThirdPlace(m) ? KO_THIRD_PLACE_MULTIPLIER : KO_MULTIPLIER[m.round] ?? 1.5;
+const koRoundName = (m: { round: number; slot: number }) =>
+  isKoThirdPlace(m) ? '3er puesto' : KO_ROUND_NAME[m.round] || '';
 
 type KoSets = {
   s1p1: number; s1p2: number;
@@ -232,14 +285,14 @@ async function koMatchPairsWithRanking(match: any) {
 
 async function koNextMatchPlayed(match: { tournament_key: string; round: number; slot: number }) {
   if (match.round >= 4) return false;
+  const nextSlots = match.round === 3 ? [Math.floor(match.slot / 2), KO_THIRD_PLACE_SLOT] : [Math.floor(match.slot / 2)];
   const { data } = await supabase
     .from('ko_matches')
     .select('status')
     .eq('tournament_key', match.tournament_key)
     .eq('round', match.round + 1)
-    .eq('slot', Math.floor(match.slot / 2))
-    .maybeSingle();
-  return data?.status === 'played';
+    .in('slot', nextSlots);
+  return (data || []).some((d) => d.status === 'played');
 }
 
 function normalizePaymentMethod(raw: unknown): 'venmo' | 'zelle' | null {
@@ -832,8 +885,8 @@ export async function POST(req: Request) {
         set3_a: s3p1, set3_b: s3p2,
         winner_team: winnerPairId === match.pair1_id ? 'A' : 'B',
         source: 'torneo',
-        tournament_multiplier: KO_MULTIPLIER[match.round] ?? 1.5,
-        notes: `Torneo Fall '26 — ${KO_ROUND_NAME[match.round] || ''}`,
+        tournament_multiplier: koMultiplier(match),
+        notes: `Torneo Fall '26 — ${koRoundName(match)}`,
         submitted_at: new Date().toISOString(),
         ko_match_id: match.id,
       });
@@ -945,7 +998,7 @@ export async function POST(req: Request) {
       };
 
       const tournamentMultiplier = koLink
-        ? KO_MULTIPLIER[koLink.match.round] ?? 1.5
+        ? koMultiplier(koLink.match)
         : tournamentGroup ? (multiplierMap[tournamentGroup] ?? 1.0) : 1.0;
       const matchSource = koLink || tournamentGroup ? 'torneo' : (source || 'slot');
 
@@ -965,7 +1018,7 @@ export async function POST(req: Request) {
         set3_b,
         winner_team,
         source: matchSource,
-        notes: notes || (koLink ? `Torneo Fall '26 — ${KO_ROUND_NAME[koLink.match.round] || ''}` : null),
+        notes: notes || (koLink ? `Torneo Fall '26 — ${koRoundName(koLink.match)}` : null),
         submitted_by_player_id,
         submitted_at: new Date().toISOString(),
         tournament_multiplier: tournamentMultiplier,
@@ -1246,7 +1299,11 @@ export async function POST(req: Request) {
       if (!match) return bad('No se encontró el partido.');
       if (match.status !== 'played') return bad('Este partido no tiene resultado.');
       if (await koNextMatchPlayed(match)) {
-        return bad('El partido siguiente ya se jugó. Borrá primero ese resultado.');
+        return bad(
+          match.round === 3
+            ? 'La final o el partido por el 3er puesto ya se jugaron. Borrá primero ese resultado.'
+            : 'El partido siguiente ya se jugó. Borrá primero ese resultado.'
+        );
       }
 
       const { error } = await supabase

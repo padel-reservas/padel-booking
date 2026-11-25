@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { KO_ROUNDS, KO_TOURNAMENT_KEY, type KoMatch, type KoPair } from '../lib/bracket';
+import { KO_TOURNAMENT_KEY, koMatchRoundName, type KoMatch, type KoPair } from '../lib/bracket';
 import type {
   Match,
   RankingPlayer,
@@ -248,7 +248,7 @@ export default function TurnosTab({
     return p ? `${p.player1_name}/${p.player2_name}` : 'Por definir';
   };
   const koMatchLabel = (m: KoMatch) =>
-    `${KO_ROUNDS.find((r) => r.round === m.round)?.name || ''}: ${koShortPair(m.pair1_id)} vs ${koShortPair(m.pair2_id)}`;
+    `${koMatchRoundName(m)}: ${koShortPair(m.pair1_id)} vs ${koShortPair(m.pair2_id)}`;
 
   async function linkSlotToKo(slotId: number, koMatchId: number | null) {
     const result = await adminAction({ action: 'updateSlotKoMatch', slotId, koMatchId });
@@ -365,7 +365,7 @@ export default function TurnosTab({
                               border: '1px solid #e9d5ff',
                             }}
                           >
-                            🏆 Fall '26{km ? ` — ${KO_ROUNDS.find((r) => r.round === km.round)?.name}` : ''}
+                            🏆 Fall '26{km ? ` — ${koMatchRoundName(km)}` : ''}
                           </div>
                         );
                       })()}

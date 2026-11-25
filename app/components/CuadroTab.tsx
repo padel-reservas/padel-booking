@@ -4,9 +4,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@supabase/supabase-js';
 import {
   KO_ROUNDS,
+  KO_THIRD_PLACE_NAME,
+  KO_THIRD_PLACE_SLOT,
   KO_TITLE,
   KO_TOURNAMENT_KEY,
   drawBracketImage,
+  isThirdPlace,
+  koLoser,
+  koMatchRoundName,
   pairLabel,
   setsFor,
   type KoMatch,
@@ -106,10 +111,44 @@ export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: 
     [matches, pairById, myPlayerName]
   );
 
-  const champion = useMemo(() => {
-    const final = matches.find((m) => m.round === 4);
-    return final?.status === 'played' && final.winner_pair_id ? pairById.get(final.winner_pair_id) : null;
-  }, [matches, pairById]);
+  const finalMatch = matches.find((m) => m.round === 4 && m.slot === 0) || null;
+
+  // Partido por el 3er puesto: si todavía no existe la fila, se muestra armado con los perdedores de semis
+  const thirdPlaceMatch: KoMatch = useMemo(() => {
+    const existing = matches.find((m) => isThirdPlace(m));
+    if (existing) return existing;
+    const semi = (slot: number) => matches.find((m) => m.round === 3 && m.slot === slot);
+    return {
+      id: -1,
+      tournament_key: KO_TOURNAMENT_KEY,
+      round: 4,
+      slot: KO_THIRD_PLACE_SLOT,
+      pair1_id: koLoser(semi(0)),
+      pair2_id: koLoser(semi(1)),
+      is_bye: false,
+      set1_pair1: null, set1_pair2: null,
+      set2_pair1: null, set2_pair2: null,
+      set3_pair1: null, set3_pair2: null,
+      winner_pair_id: null,
+      walkover: false,
+      status: 'pending',
+      played_at: null,
+    };
+  }, [matches]);
+
+  const podium = useMemo(() => {
+    const winnerOf = (m: KoMatch | null) =>
+      m && m.status === 'played' && m.winner_pair_id ? pairById.get(m.winner_pair_id) || null : null;
+    const first = winnerOf(finalMatch);
+    const secondId = koLoser(finalMatch);
+    return {
+      first,
+      second: secondId ? pairById.get(secondId) || null : null,
+      third: winnerOf(thirdPlaceMatch),
+    };
+  }, [finalMatch, thirdPlaceMatch, pairById]);
+
+  const champion = podium.first;
 
   async function saveResult(m: KoMatch) {
     setSaving(true);
@@ -190,7 +229,13 @@ export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: 
       >
         <span style={{ width: 20, fontSize: 12, color: '#64748b', fontWeight: 700 }}>{pair?.seed ?? ''}</span>
         <span style={{ flex: 1, minWidth: 0 }}>
-          {pair ? pairLabel(pair) : m.is_bye ? 'pasa directo' : 'Por definir'}
+          {pair
+            ? pairLabel(pair)
+            : m.is_bye
+            ? 'pasa directo'
+            : isThirdPlace(m)
+            ? `Perdedor semi ${side}`
+            : 'Por definir'}
           {mine && <span style={{ color: '#2563eb', fontSize: 12 }}> (vos)</span>}
         </span>
         {score && <span style={{ fontWeight: 800, letterSpacing: 1 }}>{score}</span>}
@@ -235,7 +280,7 @@ export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: 
   }
 
   function renderMatch(m: KoMatch) {
-    const bothPairs = !!m.pair1_id && !!m.pair2_id;
+    const bothPairs = !!m.pair1_id && !!m.pair2_id && m.id > 0;
     const canLoad = m.status === 'pending' && bothPairs && (adminUnlocked || isMyPair(m.pair1_id) || isMyPair(m.pair2_id));
     const highlight = isMyPair(m.pair1_id) || isMyPair(m.pair2_id);
 
@@ -321,6 +366,12 @@ export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: 
         <div style={{ ...card, background: '#fef9c3', borderColor: '#eab308', textAlign: 'center' }}>
           <div style={{ fontSize: 13, color: '#854d0e', fontWeight: 700 }}>CAMPEONES</div>
           <div style={{ fontSize: 22, fontWeight: 800 }}>🏆 {pairLabel(champion)}</div>
+          <div style={{ display: 'grid', gap: 4, marginTop: 10, fontSize: 15 }}>
+            {podium.second && <div>🥈 {pairLabel(podium.second)}</div>}
+            <div style={{ color: podium.third ? undefined : '#854d0e' }}>
+              🥉 {podium.third ? pairLabel(podium.third) : 'Se define en el partido por el 3er puesto'}
+            </div>
+          </div>
         </div>
       )}
 
@@ -331,14 +382,14 @@ export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: 
             {pairLabel(pairById.get(myNextMatch.pair1_id!)!)} <b>vs</b> {pairLabel(pairById.get(myNextMatch.pair2_id!)!)}
           </div>
           <div style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>
-            {KO_ROUNDS.find((r) => r.round === myNextMatch.round)?.name} ·{' '}
+            {koMatchRoundName(myNextMatch)} ·{' '}
             {KO_ROUNDS.find((r) => r.round === myNextMatch.round)?.window}
           </div>
         </div>
       )}
 
       {KO_ROUNDS.map((r) => {
-        const roundMatches = matches.filter((m) => m.round === r.round);
+        const roundMatches = matches.filter((m) => m.round === r.round && !isThirdPlace(m));
         const played = roundMatches.filter((m) => m.status === 'played').length;
         const total = roundMatches.filter((m) => !m.is_bye).length;
         return (
@@ -353,6 +404,19 @@ export default function CuadroTab({ myPlayerName, adminUnlocked, adminAction }: 
           </div>
         );
       })}
+
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>🥉 {KO_THIRD_PLACE_NAME}</h3>
+          <span style={{ color: '#64748b', fontSize: 13 }}>
+            {KO_ROUNDS.find((r) => r.round === 4)?.window} · {thirdPlaceMatch.status === 'played' ? 1 : 0}/1 jugados
+          </span>
+        </div>
+        <div style={{ color: '#64748b', fontSize: 13, marginBottom: 10 }}>
+          Lo juegan los perdedores de las semis, la misma semana que la final.
+        </div>
+        {renderMatch(thirdPlaceMatch)}
+      </div>
     </div>
   );
 }
