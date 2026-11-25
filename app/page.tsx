@@ -2231,7 +2231,7 @@ export default function Page() {
           {tabButton('Duelo', 'duelo')}
           {tabButton('Historial', 'historial')}
           {tabButton('Actividad', 'actividad')}
-          {tabButton('Torneo', 'torneo')}
+          {tabButton("Torneo Spring '26", 'torneo')}
           {tabButton('Copa de Leche', 'copadeLeche')}
           {tabButton('¿Jugás el torneo?', 'torneoInteres')}
           {canSeeAdmin && activeTab === 'turnos' && (

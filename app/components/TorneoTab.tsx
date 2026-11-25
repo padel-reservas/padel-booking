@@ -617,7 +617,7 @@ export default function TorneoTab({ rankingPlayers, slots, slotPlayers, myPlayer
 
       {/* Header */}
       <div style={{ background: 'white', borderRadius: 20, padding: 20, border: '1px solid #e5e7eb' }}>
-        <h2 style={{ marginTop: 0, marginBottom: 4 }}>🏆 Greenwich Padel Open Spring 26</h2>
+        <h2 style={{ marginTop: 0, marginBottom: 4 }}>🏆 Torneo Spring '26</h2>
         <p style={{ color: '#64748b', marginBottom: 0 }}>
           Fase de grupos — fecha límite: <strong>27 de abril</strong>
         </p>
