@@ -11,7 +11,6 @@ type MyRankingSummary = {
 
 type OfficialRanking = {
   official: RankedPlayer[];
-  inactive: RankedPlayer[];
   below: RankedPlayer[];
   all: RankedPlayer[];
 };
@@ -129,25 +128,6 @@ export default function RankingTab({
           >
             <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>{p.name}</span>
-              {p.is_inactive && p.matches_window >= RANKING_RULES.officialMinMatches && (
-                <span
-                  title={
-                    p.last_played
-                      ? `Último partido: ${p.last_played}. Vuelve al ranking con su próximo partido.`
-                      : undefined
-                  }
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: 999,
-                    fontSize: 11,
-                    fontWeight: 800,
-                    background: '#fef3c7',
-                    color: '#92400e',
-                  }}
-                >
-                  Inactivo
-                </span>
-              )}
               {isMe && (
                 <span
                   style={{
@@ -186,7 +166,7 @@ export default function RankingTab({
           </td>
 
           <td style={{ padding: '14px 12px', borderBottom: '1px solid #eef2f7' }}>
-            {isOfficial || p.matches_window >= RANKING_RULES.officialMinMatches ? (
+            {isOfficial ? (
               p.matches_played
             ) : (
               <span title="Partidos en los últimos 12 meses">
@@ -283,7 +263,6 @@ export default function RankingTab({
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Ranking</h2>
           <div style={{ marginTop: 6, color: '#64748b', fontSize: 14 }}>
             Ranking oficial: {RANKING_RULES.officialMinMatches}+ partidos en los últimos 12 meses.
-            Más de 4 meses sin jugar = inactivo (no pierde puntos, vuelve al jugar).
           </div>
         </div>
 
@@ -298,8 +277,7 @@ export default function RankingTab({
             fontWeight: 700,
           }}
         >
-          {officialRanking.official.length} en ranking · {officialRanking.inactive.length} inactivos ·{' '}
-          {officialRanking.below.length} en camino
+          {officialRanking.official.length} en ranking · {officialRanking.below.length} en camino
         </div>
       </div>
 
@@ -372,8 +350,6 @@ export default function RankingTab({
           <div style={{ fontWeight: 800, fontSize: 18 }}>
             {myRankingSummary.position
               ? `#${myRankingSummary.position} en el ranking`
-              : myRankingSummary.player.matches_window >= RANKING_RULES.officialMinMatches
-              ? 'Inactivo: volvés al ranking con tu próximo partido'
               : `En camino: ${myRankingSummary.player.matches_window}/${RANKING_RULES.officialMinMatches} partidos para entrar al ranking`}
           </div>
 
@@ -627,14 +603,6 @@ export default function RankingTab({
 
         <tbody>
           {officialRanking.official.map((p, idx) => renderRow(p, idx))}
-
-          {officialRanking.inactive.length > 0 &&
-            sectionHeader(
-              'Inactivos',
-              'Más de 4 meses sin jugar. Conservan sus puntos y vuelven a su lugar con el próximo partido.'
-            )}
-
-          {officialRanking.inactive.map((p, idx) => renderRow(p, idx))}
 
           {officialRanking.below.length > 0 &&
             sectionHeader(

@@ -49,7 +49,6 @@ export function playerNameById(players: RankingPlayer[], id: number) {
 export const RANKING_RULES = {
   officialMinMatches: 12, // partidos mínimos en la ventana para estar arriba de la línea
   windowDays: 365, // ventana móvil de 12 meses
-  inactiveAfterDays: 120, // ~4 meses sin jugar: sale del ranking oficial como "Inactivo" (no pierde puntos)
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -99,16 +98,14 @@ export function buildOfficialRanking(
       const last = lastPlayed.get(p.id) || null;
       const daysSinceLast = last ? daysBetweenISO(last, today) : null;
       const matchesWindow = windowCount.get(p.id) || 0;
-      const isInactive = daysSinceLast == null || daysSinceLast > rules.inactiveAfterDays;
 
       return {
         ...p,
         ranking_points: Number(p.display_rating),
         days_since_last: daysSinceLast,
-        is_inactive: isInactive,
         matches_window: matchesWindow,
         last_played: last,
-        is_official: matchesWindow >= rules.officialMinMatches && !isInactive,
+        is_official: matchesWindow >= rules.officialMinMatches,
         official_position: null,
       };
     });
@@ -118,18 +115,12 @@ export function buildOfficialRanking(
     r.official_position = idx + 1;
   });
 
-  // Inactivos: tenían los partidos pero hace más de 4 meses que no juegan.
-  // Vuelven a su lugar con el primer partido.
-  const inactive = rows
-    .filter((r) => !r.is_official && r.is_inactive && r.matches_window >= rules.officialMinMatches)
-    .sort(compareRanked);
-
   // En camino: todavía no llegan al mínimo de partidos. Primero los más cerca de entrar.
   const below = rows
-    .filter((r) => !r.is_official && r.matches_window < rules.officialMinMatches)
+    .filter((r) => !r.is_official)
     .sort((a, b) => b.matches_window - a.matches_window || compareRanked(a, b));
 
-  return { official, inactive, below, all: [...official, ...inactive, ...below] };
+  return { official, below, all: [...official, ...below] };
 }
 
 export function statsMap(rankedPlayers: RankedPlayer[]) {
@@ -140,7 +131,6 @@ export function statsMap(rankedPlayers: RankedPlayer[]) {
       display: number;
       winPct: number;
       provisional: boolean;
-      inactive: boolean;
     }
   >();
 
@@ -150,7 +140,6 @@ export function statsMap(rankedPlayers: RankedPlayer[]) {
       display: p.ranking_points,
       winPct: p.win_pct,
       provisional: p.provisional,
-      inactive: p.is_inactive && p.matches_window >= RANKING_RULES.officialMinMatches,
     });
   });
 
