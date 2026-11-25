@@ -67,12 +67,13 @@ export type TorneoResumen = TorneoDef & {
   parejas: number | null;
 };
 
+// Medallero: cada columna cuenta solo esa posición (no se repiten)
 export type PalmaresRow = {
   name: string;
-  titulos: number;
-  finales: number;
-  podios: number;
-  copas: number;
+  titulos: number; // 1º
+  segundos: number; // 2º
+  bronces: number; // 3º
+  copas: number; // Copa de Leche
 };
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -165,24 +166,19 @@ export function useTorneosHistorial() {
     const rows = new Map<string, PalmaresRow>();
     const row = (name: string) => {
       const k = norm(name);
-      if (!rows.has(k)) rows.set(k, { name, titulos: 0, finales: 0, podios: 0, copas: 0 });
+      if (!rows.has(k)) rows.set(k, { name, titulos: 0, segundos: 0, bronces: 0, copas: 0 });
       return rows.get(k)!;
     };
     for (const t of torneos) {
       const { first, second, third } = t.podioFinal;
       first?.forEach((n) => {
-        const r = row(n);
-        r.titulos++;
-        r.finales++;
-        r.podios++;
+        row(n).titulos++;
       });
       second?.forEach((n) => {
-        const r = row(n);
-        r.finales++;
-        r.podios++;
+        row(n).segundos++;
       });
       third?.forEach((n) => {
-        row(n).podios++;
+        row(n).bronces++;
       });
       t.copaLeche?.first.forEach((n) => {
         row(n).copas++;
@@ -191,8 +187,8 @@ export function useTorneosHistorial() {
     return [...rows.values()].sort(
       (a, b) =>
         b.titulos - a.titulos ||
-        b.finales - a.finales ||
-        b.podios - a.podios ||
+        b.segundos - a.segundos ||
+        b.bronces - a.bronces ||
         b.copas - a.copas ||
         a.name.localeCompare(b.name)
     );

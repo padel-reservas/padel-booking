@@ -151,7 +151,7 @@ export default function TorneosTab({ torneos, palmares, myPlayerName, canSeeCuad
       <div style={card}>
         <h2 style={{ marginTop: 0, marginBottom: 4 }}>Palmarés</h2>
         <div style={{ color: '#64748b', fontSize: 13, marginBottom: 12 }}>
-          Títulos, finales y podios sumando todos los torneos.
+          Medallero de todos los torneos: cada columna cuenta solo ese puesto.
         </div>
         {palmares.length === 0 ? (
           <div style={{ color: '#64748b' }}>Todavía no hay resultados.</div>
@@ -160,7 +160,7 @@ export default function TorneosTab({ torneos, palmares, myPlayerName, canSeeCuad
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
               <thead>
                 <tr>
-                  {['Jugador', '🏆 Títulos', '🥈 Finales', '🥉 Podios', '🥛 Copa'].map((h, i) => (
+                  {['Jugador', '🥇 Títulos', '🥈 2º', '🥉 Bronce', '🥛 Copa'].map((h, i) => (
                     <th
                       key={h}
                       style={{
@@ -194,8 +194,8 @@ export default function TorneosTab({ torneos, palmares, myPlayerName, canSeeCuad
                         {r.name}
                       </td>
                       <td style={cell(r.titulos, true)}>{r.titulos}</td>
-                      <td style={cell(r.finales)}>{r.finales}</td>
-                      <td style={cell(r.podios)}>{r.podios}</td>
+                      <td style={cell(r.segundos)}>{r.segundos}</td>
+                      <td style={cell(r.bronces)}>{r.bronces}</td>
                       <td style={cell(r.copas)}>{r.copas}</td>
                     </tr>
                   );
